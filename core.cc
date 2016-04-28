@@ -137,11 +137,11 @@ PDB::~PDB() {
 void MultiPDBVoxelizer::SetRadius(double r) {
   radius = r;
   vradius = step*r;
-  step *= (double) maxpxl/(maxpxl + r*6);
+  step *= (double) (maxpxl + r*6)/maxpxl;
   vradius = r*step;
-  xoffset -= r*3;
-  yoffset -= r*3;
-  zoffset -= r*3;
+  xoffset += r*3;
+  yoffset += r*3;
+  zoffset += r*3;
 }
 
 void MultiPDBVoxelizer::SetDimensions(int i, int j, int k) { x = i, y = j, z = k, v = x*y*z, a = x*y; }
@@ -175,9 +175,9 @@ void MultiPDBVoxelizer::CalculateSpan() {
   yadj = ymin/yratio;
   zadj = zmin/zratio;
   step = maxdim/maxpxl;
-  xoffset = xdiff*(1 - xratio)/(2*step);
-  yoffset = ydiff*(1 - yratio)/(2*step);
-  zoffset = xdiff*(1 - zratio)/(2*step);
+  xoffset = xdiff*(1 - xratio)*step/2;
+  yoffset = ydiff*(1 - yratio)*step/2;
+  zoffset = xdiff*(1 - zratio)*step/2;
 }
 
 PNG<PNG_FORMAT_GA>::Pixel *MultiPDBVoxelizer::Voxelize() {
