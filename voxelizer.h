@@ -30,7 +30,7 @@ static inline void strtodim(char *str, int *x, int *y, int *z) {
     *z = *x;
     return;
   }
-  *y = atoi(strtok(NULL, "x"));
+  *y = atoi(next);
   *z = atoi(strtok(NULL, "x"));
 }
 
