@@ -64,7 +64,7 @@ template <int format> uint8_t PNG<format>::Pixel::GetValue() {
   return g;
 }
 
-template <int format> PNG<format>::PNG(int x = 0, int y = 0, void *buf = nullptr) : buffer(buf) {
+template <int format> PNG<format>::PNG(int x, int y, void *buf) : buffer(buf) {
   img.width = x;
   img.height = y;
   img.version = PNG_IMAGE_VERSION;
