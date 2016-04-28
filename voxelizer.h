@@ -116,9 +116,8 @@ template <typename T> void ParseFilename(char *fn, vector<char *> &filenames, ve
 json_object *NewDoubleOrInt(double d);
 
 struct HMM {
-  typedef uint8_t State;
+  typedef pair<uint8_t, size_t> State;
   typedef pair<State, State> Transition;
-  typedef vector<State> 2DState;
   typedef uint8_t Observation;
   typedef shared_ptr<HMM> Ptr;
   static Ptr New();
@@ -153,21 +152,36 @@ struct ViterbiResult {
   double probability;
 };
 
+struct HMM2D {
+  enum class Direction {
+    X, Y
+  };
+  typedef shared_ptr<HMM2D> Ptr;
+  static Ptr New();
+  vector<double> &GetTransition(Direction);
+  vector<double> &GetInitial(Direction);
+  typedef uint8_t PartialState;
+  typedef vector<PartialState> State;
+  vector<PartialState> states;
+  vector<double> xtransition;
+  vector<double> xinitial;
+  vector<double> ytransition;
+  vector<double> yinitial;
+};
+
 struct Permutation {
-  vector<shared_ptr<Permutation>> last;
-  HMM::State *ptr;
+  vector<Permutation *> last;
+  HMM2D::PartialState state;
   double probability;
+  ~Permutation();
 };
 
 struct Viterbi2DResult {
   ~Viterbi2DResult();
   Viterbi2DResult *last;
-  HMM::2DState x;
-  HMM::2DState y;
-  enum class Direction {
-    X, Y
-  }
-  Direction direction;
+  HMM2D::State x;
+  HMM2D::State y;
+  HMM2D::Direction direction;
   double probability;
 };
 
@@ -182,4 +196,7 @@ ViterbiResult *ViterbiMax(HMM::Ptr m, const vector<HMM::Observation> &, size_t l
 json_object *StateToJsonObject(HMM::State s);
 
 void PrintViterbiResult(ViterbiResult *vr);
+
+Permutation *EM(HMM2D::Ptr a, HMM2D::Direction d, size_t len, HMM2D::PartialState s);
+Permutation *EMMax(HMM2D::Ptr a, HMM2D::Direction d, size_t len);
 #endif

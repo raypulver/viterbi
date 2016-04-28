@@ -136,10 +136,10 @@ PDB::~PDB() {
 
 void MultiPDBVoxelizer::SetRadius(double r) {
   radius = r;
-  step *= (maxpxl + r)/maxpxl;
-  xadj -= r;
-  yadj -= r;
-  zadj -= r;
+  step *= (maxpxl + r*2.16)/maxpxl;
+  xadj -= r*2.16;
+  yadj -= r*2.16;
+  zadj -= r*2.16;
   vradius = r*step;
 }
 
@@ -399,91 +399,173 @@ template <typename T> HMMGroup::Ptr CalculateHMMGroup(T *items, size_t *dimensio
   return retval;
 }
 
-Permutation *EMStartingWith(HMM::Ptr a, size_t len, HMM::State *s) {
-  vector<double> backup = a->initial;
-  fill(a->initial.begin(), a->initial.end(), 0);
-  a->initial[s - &a->states[0]] = 1;
-  shared_ptr<Permutation> retval = EMMax(a, len + 1);
-  shared_ptr<Permutation> starting = retval->last[0];
-  a->initial = backup;
+Permutation *EMStartingWith(HMM2D::Ptr a, HMM2D::Direction d, size_t len, HMM2D::PartialState s) {
+  vector<double> backup = a->GetInitial(d);
+  fill(a->GetInitial(d).begin(), a->GetInitial(d).end(), 0);
+  a->GetInitial(d)[s] = 1;
+  Permutation* retval = EMMax(a, d, len + 1);
+  Permutation* starting = retval->last[0];
+  a->GetInitial(d) = backup;
   return starting;
 }
 
-void ForeachPermutation(Permutation *p, function<bool(const HMM::2DState &)> fn) {
-  HMM::2DState permute;
-  ForeachPermutationOfLength(p, fn, permute);
-}
-
-void ForeachPermutation(Permutation *p, function<bool(const HMM::2DState &)> fn, HMM::2DState &state) {
+void ForeachPermutation(Permutation *p, function<bool(HMM2D::State &, size_t, double)> fn, HMM2D::State &state, size_t &idx) {
   Permutation *tmp;
   if (p->last.size() == 0) {
-    state.push_back(p->ptr);
-    fn(state);
+    state.push_back(p->state);
+    fn(state, idx, p->probability);
+    idx++;
     state.resize(state.size() - 1);
   } else {
-    if (p->ptr) state.push_back(p->ptr);
+    if (p->state != 255) state.push_back(p->state);
     for (auto it = p->last.begin(); it != p->last.end(); it++) {
-      ForeachPermutationOfLength(it->get(), len, fn, state);
+      ForeachPermutation(*it, fn, state, idx);
     }
-    if (p->ptr) state.resize(state.size() - 1);
+    if (p->state != 255) state.resize(state.size() - 1);
+    for (auto it = p->last.begin(); it != p->last.end(); it++) {
+      ForeachPermutation(*it, fn, state, idx);
+    }
+    if (p->state != 255) state.resize(state.size() - 1);
   }
-    
-    
+}
 
-Viterbi2DResult *Viterbi2D(HMM::Ptr x, HMM::Ptr y, HMM::Ptr xy, size_t s, size_t t, HMM::2DState &i, HMM::2DState &j, Viterbi2DResult *last) {
+void ForeachPermutation(Permutation *p, function<bool(HMM2D::State &, size_t, double)> fn) {
+  HMM2D::State permute;
+  size_t i = 0;
+  ForeachPermutation(p, fn, permute, i);
+}
+
+double SumThe2DState(HMM2D::State &state) {
+  size_t sum = 0;
+  for (auto s : state) {
+    sum += s;
+  }
+  return sum;
+}
+
+double SumThe2DStateExceptFirst(HMM2D::State &state) {
+  size_t sum = 0;
+  HMM2D::State::const_iterator it = state.cbegin();
+  it++;
+  for (; it != state.cend(); it++) {
+    sum += *it;
+  }
+  return sum;
+}
+    
+double Prob(HMM2D::Ptr a, HMM2D::Direction d, size_t obs, HMM2D::State &state, size_t len) {
+  double total = 0;
+  size_t sum = SumThe2DState(state);
+  int o = obs;
+  o -= sum;
+  if (o < 0) return 0;
+  vector<double> initial = a->GetInitial(d);
+  fill(a->GetInitial(d).begin(), a->GetInitial(d).end(), 0);
+  a->GetInitial(d)[state.back()] = 1;
+  Permutation *permute = EMMax(a, d, len - state.size());
+  ForeachPermutation(permute, [&] (HMM2D::State &state, size_t i, double probability) -> bool {
+    if (SumThe2DStateExceptFirst(state) == o) { total += probability; }
+  });
+  delete permute;
+  a->GetInitial(d) = initial;
+  return total;
+}
+  
+Viterbi2DResult::~Viterbi2DResult() {
+  if (last) delete last;
+}
+   
+
+Viterbi2DResult *Viterbi2D(HMM2D::Ptr a, vector<HMM::Observation> &xobs, vector<HMM::Observation> &yobs, size_t s, size_t t, HMM2D::State &i, HMM2D::State &j, Viterbi2DResult *last) {
   Viterbi2DResult *result = new Viterbi2DResult();
-  result->probability = Prob(x->obs[s], i)*Prob(y->obs[t], j);
+  result->probability = Prob(a, HMM2D::Direction::X,  xobs[s], i, yobs.size())*Prob(a, HMM2D::Direction::Y, yobs[t], j, xobs.size());
   if (!result->probability) return result;
   double max = 0;
-  Permutation *xset = EMMax(x, i.size() - 2);
-  Permutation *yset = EMMax(y, j.size() - 2);
-  Permutation *xyset = EMMax(xy, min(i.size() - 2, j.size() - 2));
-  ForeachPermutation(xset, [&] (HMM::2DState xpartial) -> bool {
-    ForeachPermutation(yset, [&] (HMM::2DState ypartial) -> bool {
-      ForeachPermutation(zset, [&] (HMM::2DState xypartial) -> bool {
-        double xprob, yprob, xyprob;
-        double overall;
-        Viterbi2DResult *xviterbi = Viterbi2D(x, y, xy, s - 1, t, xpartial, j, result));
-        Viterbi2DResult *yviterbi = Viterbi2D(x, y, xy, s, t - 1, i, ypartial, result);
-  *(yprob = y->matrix[y->states.size()*ypartial.back() + j.back()]*Viterbi2D(x, y, xy, s, t - 1, i, ypartial, result))*(xyprob = xy->matrix[xy->states.size()*xypartial.back() * i.back()]*Viterbi2D(x, y, xy, s - 1, t - 1, xpartial, ypartial));
-        overall = (xprob = x->matrix[x->states.size()*xpartial.back() + i.back()] * Viterbi2D(x, y, xy, s - 1, t, xpartial, j, result))*(yprob = y->matrix[y->states.size()*ypartial.back() + j.back()]*Viterbi2D(x, y, xy, s, t - 1, i, ypartial, result))*(xyprob = xy->matrix[xy->states.size()*xypartial.back() * i.back()]*Viterbi2D(x, y, xy, s - 1, t - 1, xpartial, ypartial));
-        if (overall > max;
+  Permutation *xset = EMMax(a, HMM2D::Direction::X, i.size() - 2);
+  Permutation *yset = EMMax(a, HMM2D::Direction::Y, j.size() - 2);
+  ForeachPermutation(xset, [&] (HMM2D::State xpartial, size_t xidx, double) -> bool {
+    ForeachPermutation(yset, [&] (HMM2D::State ypartial, size_t yidx, double) -> bool {
+      if (xpartial.back() != ypartial.back()) { return true; }
+      double xprob, yprob;
+      double overall;
+      Viterbi2DResult *xviterbi = Viterbi2D(a, xobs, yobs, s - 1, t, xpartial, j, result);
+      Viterbi2DResult *yviterbi = Viterbi2D(a, xobs, yobs, s, t - 1, i, ypartial, result);
+      xprob = a->xtransition[a->states.size()*xpartial.back() + i.back()]*xviterbi->probability;
+      yprob = a->ytransition[a->states.size()*ypartial.back() + j.back()]*yviterbi->probability;
+      overall = xprob*yprob;
+      if (overall > max) {
+        max = overall;
+        result->x = xpartial;
+        result->y = ypartial;
+        if (yprob > xprob) {
+          result->direction = HMM2D::Direction::Y;
+          delete xviterbi;
+          result->last = yviterbi;
+        } else {
+          result->direction = HMM2D::Direction::X;
+          delete yviterbi;
+          result->last = xviterbi;
+        }
+      } else {
+        delete xviterbi;
+        delete yviterbi;
+      }
+    });
+  });
+  result->probability *= max;
+  return result;
+}
 
-Permutation *EMMax(HMM::Ptr a, size_t len) {
+HMM2D::Ptr HMM2D::New() {
+  return HMM2D::Ptr(new HMM2D());
+}
+
+vector<double> &HMM2D::GetTransition(HMM2D::Direction d) {
+  if (d == HMM2D::Direction::X) {
+    return xtransition;
+  } else return ytransition;
+}
+
+vector<double> &HMM2D::GetInitial(HMM2D::Direction d) {
+  if (d == HMM2D::Direction::X) {
+    return xinitial;
+  } else return yinitial;
+}
+
+Permutation *EMMax(HMM2D::Ptr a, HMM2D::Direction d, size_t len) {
   Permutation *result = new Permutation();
   result->probability = 100;
-  result->ptr = nullptr;
+  result->state = 255;
   for (size_t i = 0; i < a->states.size(); ++i) {
-    Permutation *previous = EM(a, len, &a->states[i]);
+    Permutation *previous = EM(a, d, len, a->states[i]);
     if (!previous->probability) {}
-    else result->last.push_back(EM(a, len, &a->states[i]));
+    else result->last.push_back(previous);
   }
   return result;
 }
 
-Permutation *EM(HMM::Ptr a, size_t len, HMM::State *s) {
+Permutation *EM(HMM2D::Ptr a, HMM2D::Direction d, size_t len, HMM2D::PartialState s) {
   Permutation *result;
-  size_t idx = s - &a->states[i];
   if (!len) {
     result = new Permutation();
-    result->ptr = s;
-    result->probability = a->initial[idx];
+    result->state = s;
+    result->probability = a->GetInitial(d)[s];
     return result;
   }
   double max = 0;
   for (size_t i = 0; i < a->states.size(); i++) {
     result = new Permutation();
-    Permutation *previous = EM(a, len - 1, &a->states[i]);
-    result->probability = a->matrix[i*a->states.size() + idx] * previous->probability;
+    Permutation *previous = EM(a, d, len - 1, a->states[i]);
+    result->probability = a->GetTransition(d)[i*a->states.size() + s] * previous->probability;
     if (result->probability > max) {
       max = result->probability;
+      result->state = s;
     }
     if (!result->probability) {
       delete previous;
     }
     else result->last.push_back(previous);
   }
-  result->ptr = s;
   result->probability = max;
   sort(result->last.begin(), result->last.end(), [] (Permutation *a, Permutation *b) -> bool {
     if (a->probability > b->probability) return true;
@@ -584,29 +666,26 @@ template void Die<char const*, int>(char const*, int);
 template void ParseFilename<unsigned char>(char*, std::vector<char*, std::allocator<char*> >&, std::vector<unsigned char, std::allocator<unsigned char> >&);
 template PNG<1>::Pixel* ZSlice<PNG<1>::Pixel>(PNG<1>::Pixel*, unsigned long, unsigned long, unsigned long);
 
-struct Permutation {
-  vector<Permutation *> last;
-  size_t state;
-  double probability;
-  ~Permutation() {
-    for (auto it = last.begin(); it != last.end(); it++) {
-      delete *it;
-    }
-};
+Permutation::~Permutation() {
+  for (auto it = last.begin(); it != last.end(); it++) {
+    delete *it;
+  }
+}
+/*
 
-Permutation *EM(AMatrix &a, PIMatrix &pi, size_t len, size_t state) {
+Permutation *EM(HMM::Ptr a, size_t len, HMM2D::PartialState state) {
   Permutation *result;
   if (!len) {
     result = new Permutation();
     result->state = state;
-    result->probability = pi[state];
+    result->probability = a->initial[state];
     return result;
   }
   double max = 0;
-  for (size_t i = 0; i < a.size(); i++) {
+  for (size_t i = 0; i < a->states.size(); i++) {
     result = new Permutation();
-    Permutation *previous = EM(a, pi, len - 1, i);
-    result->probability = a[i][state] * previous->probability;
+    Permutation *previous = EM(a, len - 1, i);
+    result->probability = a->matrix[i * a->states.size() + state] * previous->probability;
     if (result->probability > max) {
       max = result->probability;
     }
@@ -623,10 +702,4 @@ Permutation *EM(AMatrix &a, PIMatrix &pi, size_t len, size_t state) {
   return result;
 } 
 
-double prob(size_t density, vector<size_t> v, size_t ylen) {
-  for (auto it = v.begin(); it != v.end(); it++) {
-    density -= *it;
-  }
-  ylen -= v.size();
-  return EMStartingWithOfLengthAddUpTo(xA, xPi, v[v.size() - 1], ylen + 1, density); 
-}
+*/
