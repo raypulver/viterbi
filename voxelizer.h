@@ -102,6 +102,7 @@ class MultiPDBVoxelizer {
   float xmin, xmax, ymin, ymax, zmin, zmax, xdiff, ydiff, zdiff, xadj, yadj, zadj, maxdim;
   double xratio, yratio, zratio, step, radius, vradius;
   int x, y, z, a, v, maxpxl;
+  int xoffset, yoffset, zoffset;
   vector<PDB::Ptr> pdbs;
   public:
     void SetRadius(double r);

@@ -136,11 +136,12 @@ PDB::~PDB() {
 
 void MultiPDBVoxelizer::SetRadius(double r) {
   radius = r;
-  step *= (maxpxl + r*2.16)/maxpxl;
-  xadj -= r*2.16;
-  yadj -= r*2.16;
-  zadj -= r*2.16;
+  vradius = step*r;
+  step *= (double) maxpxl/(maxpxl + r*6);
   vradius = r*step;
+  xoffset -= r*3;
+  yoffset -= r*3;
+  zoffset -= r*3;
 }
 
 void MultiPDBVoxelizer::SetDimensions(int i, int j, int k) { x = i, y = j, z = k, v = x*y*z, a = x*y; }
@@ -174,6 +175,9 @@ void MultiPDBVoxelizer::CalculateSpan() {
   yadj = ymin/yratio;
   zadj = zmin/zratio;
   step = maxdim/maxpxl;
+  xoffset = xdiff*(1 - xratio)/(2*step);
+  yoffset = ydiff*(1 - yratio)/(2*step);
+  zoffset = xdiff*(1 - zratio)/(2*step);
 }
 
 PNG<PNG_FORMAT_GA>::Pixel *MultiPDBVoxelizer::Voxelize() {
@@ -195,13 +199,13 @@ PNG<PNG_FORMAT_GA>::Pixel *MultiPDBVoxelizer::Voxelize() {
             center[0] = (*it)->ts.coords[l*3];
             center[1] = (*it)->ts.coords[l*3 + 1];
             center[2] = (*it)->ts.coords[l*3 + 2];
-            mincoords[0] = xadj + (double) i*step;
+            mincoords[0] = xadj + (double) (i - xoffset)*step;
             centercoords[0] = mincoords[0] + step/2;
             maxcoords[0] = mincoords[0] + step;
-            mincoords[1] = yadj + (double) j*step;
+            mincoords[1] = yadj + (double) (j - yoffset)*step;
             centercoords[1] = mincoords[1] + step/2;
             maxcoords[1] = mincoords[1] + step;
-            mincoords[2] = zadj + (double) k*step;
+            mincoords[2] = zadj + (double) (k - zoffset)*step;
             centercoords[2] = mincoords[2] + step/2;
             maxcoords[2] = mincoords[2] + step;
             if ((center[0] >= mincoords[0] &&
