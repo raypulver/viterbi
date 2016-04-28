@@ -66,8 +66,13 @@ template <int format> class PNG {
     };
     PNG(int, int, void *);
     ~PNG();
+    int GetWidth();
+    int GetHeight();
     int Write(string);
     int Write(const char *filename);
+    void *GetBuffer();
+    PNG<format>::Pixel *GetPixelArray();
+    static PNG<format> *FromFile(string filename);
 };
   
 template <typename T> T *ZSlice(T *values, size_t x, size_t y, size_t z);
@@ -162,8 +167,14 @@ struct HMM2D {
   vector<double> &GetTransition(Direction);
   vector<double> &GetInitial(Direction);
   typedef uint8_t PartialState;
+  typedef size_t Observation;
+  vector<Observation> &GetObservations(Direction);
+  typedef pair<PartialState, PartialState> PartialTransition;
   typedef vector<PartialState> State;
   vector<PartialState> states;
+  map<PartialState, size_t> state_map;
+  vector<Observation> xobs;
+  vector<Observation> yobs;
   vector<double> xtransition;
   vector<double> xinitial;
   vector<double> ytransition;
@@ -200,4 +211,11 @@ void PrintViterbiResult(ViterbiResult *vr);
 
 Permutation *EM(HMM2D::Ptr a, HMM2D::Direction d, size_t len, HMM2D::PartialState s);
 Permutation *EMMax(HMM2D::Ptr a, HMM2D::Direction d, size_t len);
+void WriteCircle(int x, int y, const char *filename);
+json_object *HMM2DToJsonObject(HMM2D::Ptr);
+template <typename T> HMM2D::Ptr Calculate2DHMM(T *items, size_t *coords);
+template <int format> void GenProjections(PNG<format> *, vector<HMM2D::Observation> &, vector<HMM2D::Observation> &);
+Viterbi2DResult *Viterbi2DMax(HMM2D::Ptr);
+Viterbi2DResult *Viterbi2D(HMM2D::Ptr, size_t, size_t, HMM2D::State &, HMM2D::State &, Viterbi2DResult *);
+PNG<PNG_FORMAT_GA> *Reconstruct(HMM2D::Ptr, Viterbi2DResult *);
 #endif

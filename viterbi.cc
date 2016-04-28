@@ -1,34 +1,29 @@
 #include "voxelizer.h"
 #include <iostream>
 using namespace std;
+typedef enum _mode {
+  GENERATE,
+  SOLVE
+} the_mode_t;
+
+static the_mode_t mode;
 int main(int argc, char **argv) {
-  HMM::State a (0, 0);
-  HMM::State b (0, 1);
-  HMM::Observation y = 0;
-  HMM::Observation z = 1;
-  HMM::Ptr h = HMM::New();
-  h->states.push_back(a);
-  h->states.push_back(b);
-  h->initial.push_back(0.90);
-  h->initial.push_back(0.10);
-  h->obs.push_back(y);
-  h->obs.push_back(z);
-  h->emit.push_back(1);
-  h->emit.push_back(0);
-  h->emit.push_back(0);
-  h->emit.push_back(1);
-  h->matrix.push_back(0.90);
-  h->matrix.push_back(0.10);
-  h->matrix.push_back(0.10);
-  h->matrix.push_back(0.90);
-  vector<HMM::Observation> obs;
-  obs.push_back(z);
-  obs.push_back(z);
-  obs.push_back(z);
-  obs.push_back(z);
-  obs.push_back(z);
-  ViterbiResult *vr = ViterbiMax(h, obs);
-  PrintViterbiResult(vr);
-  cout << vr->probability << endl;
-  return 0;
+  if (argc > 1) {
+    if (!strcmp(argv[argc - 1], "generate")) {
+      mode = GENERATE;
+    } else if (!strcmp(argv[argc - 1], "solve")) {
+      mode = SOLVE;
+    }
+  } else mode = SOLVE;
+  if (mode == SOLVE) {
+  PNG<PNG_FORMAT_GA> *png = PNG<PNG_FORMAT_GA>::FromFile("littlecircle.png");
+  size_t coords[2] = { (size_t) png->GetWidth(), (size_t) png->GetHeight() };
+  HMM2D::Ptr hmm = Calculate2DHMM<PNG<PNG_FORMAT_GA>::Pixel>((PNG<PNG_FORMAT_GA>::Pixel *) png->GetBuffer(), coords);
+  GenProjections(png, hmm->xobs, hmm->yobs);
+  Viterbi2DResult *result = Viterbi2DMax(hmm);
+  PNG<PNG_FORMAT_GA> *reconstruction = Reconstruct(hmm, result);
+  reconstruction->Write("result.png");
+  } else {
+    WriteCircle(8, 8, "littlecircle.png");
+  }
 }

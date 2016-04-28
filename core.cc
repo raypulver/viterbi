@@ -64,6 +64,35 @@ template <int format> uint8_t PNG<format>::Pixel::GetValue() {
   return g;
 }
 
+template <int format> void *PNG<format>::GetBuffer() {
+  return buffer;
+}
+
+bool InCircle(double x, double h, double y, double k, double r) {
+  if (pow(x - h, 2) + pow(y - k, 2) < pow(r, 2)) return true;
+  return false;
+}
+
+void WriteCircle(int x, int y, const char *filename) {
+  PNG<PNG_FORMAT_GA>::Pixel *data = new PNG<PNG_FORMAT_GA>::Pixel[x*y];
+  for (int i = 0; i < x; i++) {
+    for (int j = 0; j < y; j++) {
+      if (InCircle(i, (double) x/2, j, (double) y/2, (double) min(x, y)/4)) {
+        data[i*x + j].g = 175;
+        data[i*x + j].a = 255;
+      } else if (InCircle(i, (double) x/2, j, (double) y/2, (double) min(x, y)/2)) {
+        data[i*x + j].g = 75;
+        data[i*x + j].a = 255;
+      } else {
+	data[i*x + j].a = 0;
+	data[i*x + j].g = 0;
+      }
+    }
+  }
+  PNG<PNG_FORMAT_GA> png (x, y, data);
+  png.Write(filename);
+}
+
 template <int format> PNG<format>::PNG(int x, int y, void *buf) : buffer(buf) {
   img.width = x;
   img.height = y;
@@ -72,7 +101,24 @@ template <int format> PNG<format>::PNG(int x, int y, void *buf) : buffer(buf) {
   img.format = format;
   img.flags = 0;
   img.colormap_entries = 0;
+  width = x;
+  height = y;
   colormap = nullptr;
+}
+
+template <int format> PNG<format>* PNG<format>::FromFile(string filename) {
+  png_image img;
+  memset(&img, 0, (sizeof(png_image)));
+  img.version = PNG_IMAGE_VERSION;
+  if (png_image_begin_read_from_file(&img, filename.c_str())) {
+    png_bytep buffer;
+    img.format = format;
+    buffer = (png_bytep) malloc(PNG_IMAGE_SIZE(img));
+      if (buffer != nullptr && png_image_finish_read(&img, NULL, buffer, 0, NULL)) {
+        return new PNG<format>(img.width, img.height, buffer);
+      }
+  }
+  return nullptr;
 }
 
 template <int format> PNG<format>::~PNG() {
@@ -392,6 +438,150 @@ template <typename T> HMM::Ptr CalculateHMM(T *items, size_t *coords, uint8_t fi
   return retval;
 }
 
+json_object *HMM2DToJsonObject(HMM2D::Ptr a) {
+  json_object *retval = json_object_new_object();
+  json_object *states = json_object_new_array();
+  for (auto it = a->states.begin(); it != a->states.end(); it++) {
+    json_object_array_add(states, json_object_new_int(*it));
+  }
+  json_object_object_add(retval, "states", states);
+  json_object *transitions = json_object_new_array();
+  json_object *initial = json_object_new_array();
+  json_object *obs = json_object_new_array();
+  json_object *obj = json_object_new_object();
+  for (size_t i = 0; i < a->states.size(); ++i) {
+    json_object *row = json_object_new_array();
+    json_object_array_add(transitions, row);
+    for (size_t j = 0; j < a->states.size(); ++j) {
+      json_object_array_add(row, json_object_new_double(a->xtransition[i*a->states.size() + j]));
+    }
+  }
+  for (size_t i = 0; i < a->xinitial.size(); ++i) {
+    json_object_array_add(initial, json_object_new_double(a->xinitial[i]));
+  }
+  for (size_t i = 0; i < a->xobs.size(); ++i) {
+    json_object_array_add(obs, json_object_new_int(a->xobs[i]));
+  }
+  json_object_object_add(obj, "observed", obs);
+  json_object_object_add(obj, "transition", transitions);
+  json_object_object_add(obj, "initial", initial);
+  json_object_object_add(retval, "x", obj);
+  obj = json_object_new_object();
+  transitions = json_object_new_array();
+  initial = json_object_new_array();
+  for (size_t i = 0; i < a->states.size(); ++i) {
+    json_object *row = json_object_new_array();
+    json_object_array_add(transitions, row);
+    for (size_t j = 0; j < a->states.size(); ++j) {
+      json_object_array_add(row, json_object_new_double(a->ytransition[i*a->states.size() + j]));
+    }
+  }
+  for (size_t i = 0; i < a->yinitial.size(); ++i) {
+    json_object_array_add(initial, json_object_new_double(a->yinitial[i]));
+  }
+  obs = json_object_new_array();
+  for (size_t i = 0; i < a->yobs.size(); ++i) {
+    json_object_array_add(obs, json_object_new_int(a->yobs[i]));
+  }
+  json_object_object_add(obj, "observed", obs);
+  json_object_object_add(obj, "transition", transitions);
+  json_object_object_add(obj, "initial", initial);
+  json_object_object_add(retval, "y", obj);
+  return retval;
+}
+
+template <typename T> HMM2D::Ptr Calculate2DHMM(T *items, size_t *coords) {
+  HMM2D::Ptr retval = HMM2D::New();
+  HMM2D::PartialState last_depth = 0;
+  HMM2D::PartialState depth = 0;
+  bool starting = true;
+  bool initial = true;
+  vector<HMM2D::PartialState> xinitial_states;
+  vector<HMM2D::PartialTransition> xtransitions;
+  vector<HMM2D::PartialState> yinitial_states;
+  vector<HMM2D::PartialTransition> ytransitions;
+  for (size_t i = 0; i < coords[0]; ++i) {
+    for (size_t j = 0; j < coords[1]; ++j) {
+      depth = items[i*coords[0] + j].GetValue();
+      if (initial) xinitial_states.push_back(depth);
+      else xtransitions.push_back(HMM2D::PartialTransition(last_depth, depth));
+      retval->states.push_back(depth);
+      last_depth = depth;
+      initial = false;
+    }
+    initial = true;
+  }
+  for (size_t i = 0; i < coords[1]; ++i) {
+    for (size_t j = 0; j < coords[0]; ++j) {
+      depth = items[j*coords[0] + i].GetValue();
+      if (initial) yinitial_states.push_back(depth);
+      else ytransitions.push_back(HMM2D::PartialTransition(last_depth, depth));
+      last_depth = depth;
+      initial = false;
+    }
+    initial = true;
+  }
+  sort(retval->states.begin(), retval->states.end());
+  auto it = unique(retval->states.begin(), retval->states.end());
+  retval->states.resize(distance(retval->states.begin(), it));
+  retval->xtransition.resize(retval->states.size() * retval->states.size());
+  retval->ytransition.resize(retval->states.size() * retval->states.size());
+  retval->xinitial.resize(retval->states.size());
+  retval->yinitial.resize(retval->states.size());
+  fill(retval->xtransition.begin(), retval->xtransition.end(), 0);
+  fill(retval->ytransition.begin(), retval->ytransition.end(), 0);
+  fill(retval->xinitial.begin(), retval->xinitial.end(), 0);
+  fill(retval->yinitial.begin(), retval->yinitial.end(), 0);
+  for (auto it = retval->states.begin(); it != retval->states.end(); it++) {
+    retval->state_map[*it] = distance(retval->states.begin(), it);
+  }
+  for (auto it = xtransitions.begin(); it != xtransitions.end(); it++) {
+    retval->xtransition[retval->state_map[it->first]*retval->states.size() + retval->state_map[it->second]]++;
+  }
+  for (size_t i = 0; i < retval->states.size(); ++i) {
+    double sum = 0;
+    for (size_t j = 0; j < retval->states.size(); ++j) {
+      sum += retval->xtransition[i*retval->states.size() + j];
+    }
+    if (sum) for (size_t j = 0; j < retval->states.size(); ++j) {
+      retval->xtransition[i*retval->states.size() + j] /= sum;
+    }
+  }
+  for (auto it = xinitial_states.begin(); it != xinitial_states.end(); it++) {
+    retval->xinitial[retval->state_map[*it]]++;
+  }
+  double sum = 0;
+  for (size_t i = 0; i < retval->states.size(); ++i) {
+    sum += retval->xinitial[i];
+  }
+  if (sum) for (size_t i = 0; i < retval->states.size(); ++i) {
+    retval->xinitial[i] /= sum;
+  }
+  for (auto it = ytransitions.begin(); it != ytransitions.end(); it++) {
+    retval->ytransition[retval->state_map[it->first]*retval->states.size() + retval->state_map[it->second]]++;
+  }
+  for (size_t i = 0; i < retval->states.size(); ++i) {
+    double sum = 0;
+    for (size_t j = 0; j < retval->states.size(); ++j) {
+      sum += retval->ytransition[i*retval->states.size() + j];
+    }
+    if (sum) for (size_t j = 0; j < retval->states.size(); ++j) {
+      retval->ytransition[i*retval->states.size() + j] /= sum;
+    }
+  }
+  for (auto it = yinitial_states.begin(); it != yinitial_states.end(); it++) {
+    retval->yinitial[retval->state_map[*it]]++;
+  }
+  sum = 0;
+  for (size_t i = 0; i < retval->states.size(); ++i) {
+    sum += retval->yinitial[i];
+  }
+  if (sum) for (size_t i = 0; i < retval->states.size(); ++i) {
+    retval->yinitial[i] /= sum;
+  }
+  return retval;
+}
+
 template <typename T> HMMGroup::Ptr CalculateHMMGroup(T *items, size_t *dimensions) {
   HMMGroup::Ptr retval = HMMGroup::New();
   retval->xpos = CalculateHMM(items, dimensions, 0, 0);
@@ -457,11 +647,17 @@ double SumThe2DStateExceptFirst(HMM2D::State &state) {
   return sum;
 }
     
-double Prob(HMM2D::Ptr a, HMM2D::Direction d, size_t obs, HMM2D::State &state, size_t len) {
+double Prob(HMM2D::Ptr a, HMM2D::Direction d, HMM2D::State &state, size_t i, size_t j) {
   double total = 0;
   size_t sum = SumThe2DState(state);
-  int o = obs;
+  int o;
+  if (d == HMM2D::Direction::X) {
+    o = a->GetObservations(d)[i];
+  } else o = a->GetObservations(d)[j];
   o -= sum;
+  size_t len;
+  if (d == HMM2D::Direction::X) len = i;
+  else len = j;
   if (o < 0) return 0;
   vector<double> initial = a->GetInitial(d);
   fill(a->GetInitial(d).begin(), a->GetInitial(d).end(), 0);
@@ -480,10 +676,28 @@ Viterbi2DResult::~Viterbi2DResult() {
   if (last) delete last;
 }
    
+Viterbi2DResult *Viterbi2DMax(HMM2D::Ptr a) {
+  Permutation *xset = EMMax(a, HMM2D::Direction::X, a->xobs.size() - 1);
+  Permutation *yset = EMMax(a, HMM2D::Direction::Y, a->yobs.size() - 1);
+  double max = 0;
+  Viterbi2DResult *retval;
+  ForeachPermutation(xset, [&] (HMM2D::State xpartial, size_t, double) -> bool {
+    ForeachPermutation(yset, [&] (HMM2D::State ypartial, size_t, double) -> bool {
+      Viterbi2DResult *result = Viterbi2D(a, a->xobs.size(), a->yobs.size(), xpartial, ypartial, nullptr);
+      if (retval->probability > max) {
+        retval = result;
+	max = retval->probability;
+      }
+      return true;
+    });
+    return true;
+  });
+  return retval;
+}
 
-Viterbi2DResult *Viterbi2D(HMM2D::Ptr a, vector<HMM::Observation> &xobs, vector<HMM::Observation> &yobs, size_t s, size_t t, HMM2D::State &i, HMM2D::State &j, Viterbi2DResult *last) {
+Viterbi2DResult *Viterbi2D(HMM2D::Ptr a, size_t s, size_t t, HMM2D::State &i, HMM2D::State &j, Viterbi2DResult *last) {
   Viterbi2DResult *result = new Viterbi2DResult();
-  result->probability = Prob(a, HMM2D::Direction::X,  xobs[s], i, yobs.size())*Prob(a, HMM2D::Direction::Y, yobs[t], j, xobs.size());
+  result->probability = Prob(a, HMM2D::Direction::X, i, s, t)*Prob(a, HMM2D::Direction::Y, j, s, t);
   if (!result->probability) return result;
   double max = 0;
   Permutation *xset = EMMax(a, HMM2D::Direction::X, i.size() - 2);
@@ -493,10 +707,39 @@ Viterbi2DResult *Viterbi2D(HMM2D::Ptr a, vector<HMM::Observation> &xobs, vector<
       if (xpartial.back() != ypartial.back()) { return true; }
       double xprob, yprob;
       double overall;
-      Viterbi2DResult *xviterbi = Viterbi2D(a, xobs, yobs, s - 1, t, xpartial, j, result);
-      Viterbi2DResult *yviterbi = Viterbi2D(a, xobs, yobs, s, t - 1, i, ypartial, result);
-      xprob = a->xtransition[a->states.size()*xpartial.back() + i.back()]*xviterbi->probability;
-      yprob = a->ytransition[a->states.size()*ypartial.back() + j.back()]*yviterbi->probability;
+      if (s == 0 && t == 0) {
+        xprob = a->xinitial[a->state_map[xpartial.back()]];
+	yprob = a->yinitial[a->state_map[ypartial.back()]];
+	overall = xprob*yprob;
+	result->last = nullptr;
+	result->direction = HMM2D::Direction::X;
+      } else if (s == 0) {
+        xprob = a->xinitial[a->state_map[xpartial.back()]];
+	Viterbi2DResult *yviterbi = Viterbi2D(a, s, t - 1, i, ypartial, result);
+	overall = xprob*yviterbi->probability;
+	if (overall > max) {
+	  max = overall;
+	  result->x = xpartial;
+	  result->y = ypartial;
+	  result->last = yviterbi;
+	  result->direction = HMM2D::Direction::Y;
+	} else delete yviterbi;
+      } else if (t == 0) {
+        yprob = a->yinitial[a->state_map[ypartial.back()]];
+	Viterbi2DResult *xviterbi = Viterbi2D(a, s - 1, t, xpartial, j, result);
+	overall = yprob*xviterbi->probability;
+	if (overall > max) {
+          max = overall;
+	  result->x = xpartial;
+	  result->y = ypartial;
+	  result->last = xviterbi;
+	  result->direction = HMM2D::Direction::X;
+	}
+      }
+      Viterbi2DResult *xviterbi = Viterbi2D(a, s - 1, t, xpartial, j, result);
+      Viterbi2DResult *yviterbi = Viterbi2D(a, s, t - 1, i, ypartial, result);
+      xprob = a->xtransition[a->states.size()*a->state_map[xpartial.back()] + a->state_map[i.back()]]*xviterbi->probability;
+      yprob = a->ytransition[a->states.size()*a->state_map[ypartial.back()] + a->state_map[j.back()]]*yviterbi->probability;
       overall = xprob*yprob;
       if (overall > max) {
         max = overall;
@@ -537,6 +780,11 @@ vector<double> &HMM2D::GetInitial(HMM2D::Direction d) {
   if (d == HMM2D::Direction::X) {
     return xinitial;
   } else return yinitial;
+}
+
+vector<HMM2D::Observation> &HMM2D::GetObservations(HMM2D::Direction d) {
+  if (d == HMM2D::Direction::X) return xobs;
+  else return yobs;
 }
 
 Permutation *EMMax(HMM2D::Ptr a, HMM2D::Direction d, size_t len) {
@@ -661,8 +909,18 @@ void PrintViterbiResult(ViterbiResult *vr) {
   json_object_put(result);
 }
 
-template class PNG<PNG_FORMAT_GA>;
+template <int format> int PNG<format>::GetWidth() {
+  return img.width;
+}
+template <int format> int PNG<format>::GetHeight() {
+  return img.height;
+}
 
+template <int format> typename PNG<format>::Pixel *PNG<format>::GetPixelArray() {
+  return (typename PNG<format>::Pixel *) buffer;
+}
+
+template class PNG<PNG_FORMAT_GA>;
 template void Die<char const*, char const*>(char const*, char const*);
 
 template HMMGroup::Ptr CalculateHMMGroup<PNG<1>::Pixel>(PNG<1>::Pixel*, unsigned long*);
@@ -678,35 +936,54 @@ Permutation::~Permutation() {
     delete *it;
   }
 }
-/*
 
-Permutation *EM(HMM::Ptr a, size_t len, HMM2D::PartialState state) {
-  Permutation *result;
-  if (!len) {
-    result = new Permutation();
-    result->state = state;
-    result->probability = a->initial[state];
-    return result;
-  }
-  double max = 0;
-  for (size_t i = 0; i < a->states.size(); i++) {
-    result = new Permutation();
-    Permutation *previous = EM(a, len - 1, i);
-    result->probability = a->matrix[i * a->states.size() + state] * previous->probability;
-    if (result->probability > max) {
-      max = result->probability;
-    }
-    if (!result->probability) {
-      delete previous;
-    }
-    else result->last.push_back(previous);
-  }
-  result->probability = max;
-  sort(result->last.begin(), result->last.end(), [] (Permutation *a, Permutation *b) -> bool {
-    if (a->probability > b->probability) return true;
-    else return false;
-  });
-  return result;
-} 
+template HMM2D::Ptr Calculate2DHMM<typename PNG<1>::Pixel>(typename PNG<1>::Pixel *, size_t *);
 
-*/
+template <int format> void GenProjections(PNG<format> *png, vector<HMM2D::Observation> &xobs, vector<HMM2D::Observation> &yobs) {
+  typename PNG<format>::Pixel *pixels = png->GetPixelArray();
+  for (size_t i = 0; i < png->GetWidth(); ++i) {
+    HMM2D::State tmp;
+    for (size_t j = 0; j < png->GetHeight(); ++j) {
+      tmp.push_back(pixels[i*png->GetWidth() + j].g);
+    }
+    xobs.push_back(SumThe2DState(tmp));
+  }
+  for (size_t j = 0; j < png->GetHeight(); ++j) {
+    HMM2D::State tmp;
+    for (size_t i = 0; i < png->GetWidth(); ++i) {
+      tmp.push_back(pixels[i*png->GetWidth() + j].g);
+    }
+    yobs.push_back(SumThe2DState(tmp));
+  }
+}
+
+template void GenProjections(PNG<PNG_FORMAT_GA> *, vector<HMM2D::Observation> &, vector<HMM2D::Observation> &);
+
+PNG<PNG_FORMAT_GA> *Reconstruct(HMM2D::Ptr a, Viterbi2DResult *result) {
+  size_t x = a->xobs.size();
+  size_t y = a->yobs.size();
+  PNG<PNG_FORMAT_GA>::Pixel *pxls = new PNG<PNG_FORMAT_GA>::Pixel[a->xobs.size()*a->yobs.size()];
+  while (result->last) {
+    for (size_t i = 0; i < result->x.size(); i++) {
+      if (result->x[i] == 0) {
+        pxls[a->xobs.size()*i + y] = {0, 0};
+      } else pxls[a->xobs.size()*i + y] = { result->x[i], 0xff };
+    }
+    for (size_t i = 0; i < result->y.size(); i++) {
+      if (result->y[i] == 0) {
+        pxls[a->xobs.size()*x + i] = {0, 0};
+      } else pxls[a->xobs.size()*x + i] = { result->y[i], 0xff };
+    }
+    if (result->direction == HMM2D::Direction::X) {
+      x--;
+      result = result->last;
+    } else if (result->direction == HMM2D::Direction::Y) {
+      y--;
+      result = result->last;
+    }
+  }
+  if (!result->x.back()) {
+    pxls[a->xobs.size()*x + y] = {0, 0};
+  } else pxls[a->xobs.size()*x + y] = { result->x.back(), 0xff };
+  return new PNG<PNG_FORMAT_GA>(a->xobs.size(), a->yobs.size(), pxls);
+}
