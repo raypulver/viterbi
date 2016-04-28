@@ -465,6 +465,7 @@ double Prob(HMM2D::Ptr a, HMM2D::Direction d, size_t obs, HMM2D::State &state, s
   Permutation *permute = EMMax(a, d, len - state.size());
   ForeachPermutation(permute, [&] (HMM2D::State &state, size_t i, double probability) -> bool {
     if (SumThe2DStateExceptFirst(state) == o) { total += probability; }
+    return true;
   });
   delete permute;
   a->GetInitial(d) = initial;
@@ -510,7 +511,9 @@ Viterbi2DResult *Viterbi2D(HMM2D::Ptr a, vector<HMM::Observation> &xobs, vector<
         delete xviterbi;
         delete yviterbi;
       }
+      return true;
     });
+    return true;
   });
   result->probability *= max;
   return result;
