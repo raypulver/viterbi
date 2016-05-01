@@ -93,6 +93,30 @@ void WriteCircle(int x, int y, const char *filename) {
   png.Write(filename);
 }
 
+bool InTriangle(int i, int x, int j, int y) {
+  if (i < x/2 && i > x/3 && j + 60 < y/3 && j + 50 > y/8) return true;
+  else return false;
+}
+void WriteTriangle(int x, int y, const char *filename) {
+  PNG<PNG_FORMAT_GA>::Pixel *data = new PNG<PNG_FORMAT_GA>::Pixel[x*y];
+  for (int i = 0; i < x; i++) {
+    for (int j = 0; j < y; j++) {
+      if (InTriangle(i, x, j, y)) {
+        data[i*x + j].g = 175;
+        data[i*x + j].a = 255;
+      } else if (InTriangle(i - 30, x, j - 30, y) || InTriangle(i + 10, x, j + 10, y)) {
+        data[i*x + j].g = 120;
+        data[i*x + j].a = 255;
+      } else {
+	data[i*x + j].a = 0;
+	data[i*x + j].g = 0;
+      }
+    }
+  }
+  PNG<PNG_FORMAT_GA> png (x, y, data);
+  png.Write(filename);
+}
+
 template <int format> PNG<format>::PNG(int x, int y, void *buf) : buffer(buf) {
   img.width = x;
   img.height = y;
@@ -538,6 +562,9 @@ template <typename T> HMM2D::Ptr Calculate2DHMM(T *items, size_t *coords) {
   for (auto it = xtransitions.begin(); it != xtransitions.end(); it++) {
     retval->xtransition[retval->state_map[it->first]*retval->states.size() + retval->state_map[it->second]]++;
   }
+  for (auto it = retval->xtransitionwhole.begin(); it != retval->xtransitionwhole.end(); it++) {
+    retval->xtransitionwhole.push_back(*it);
+  }
   for (size_t i = 0; i < retval->states.size(); ++i) {
     double sum = 0;
     for (size_t j = 0; j < retval->states.size(); ++j) {
@@ -559,6 +586,9 @@ template <typename T> HMM2D::Ptr Calculate2DHMM(T *items, size_t *coords) {
   }
   for (auto it = ytransitions.begin(); it != ytransitions.end(); it++) {
     retval->ytransition[retval->state_map[it->first]*retval->states.size() + retval->state_map[it->second]]++;
+  }
+  for (auto it = retval->ytransition.begin(); it != retval->ytransition.end(); it++) {
+    retval->ytransition.push_back(*it);
   }
   for (size_t i = 0; i < retval->states.size(); ++i) {
     double sum = 0;
@@ -986,4 +1016,226 @@ PNG<PNG_FORMAT_GA> *Reconstruct(HMM2D::Ptr a, Viterbi2DResult *result) {
     pxls[a->xobs.size()*x + y] = {0, 0};
   } else pxls[a->xobs.size()*x + y] = { result->x.back(), 0xff };
   return new PNG<PNG_FORMAT_GA>(a->xobs.size(), a->yobs.size(), pxls);
+}
+
+void RowNormalize(HMM2D *a) {
+  for (size_t i = 0; i < a->states.size(); ++i) {
+    size_t sum = 0;
+    size_t ysum = 0;
+    for (size_t j = 0; j < a->states.size(); ++j) {
+      sum += a->xtransitionwhole[i*a->states.size() + j];
+      ysum += a->ytransitionwhole[i*a->states.size() + j];
+    }
+    for (size_t j = 0; j < a->states.size(); ++j) {
+      a->xtransition[i*a->states.size() + j] = a->xtransitionwhole[i*a->states.size() + j]/sum;
+      a->ytransition[i*a->states.size() + j] = a->ytransitionwhole[i*a->states.size() + j]/ysum;
+    }
+  }
+} 
+
+void Transpose(vector<size_t> vec, size_t len) {
+  size_t columns = vec.size()/len;
+  for (size_t i = 0; i < len; ++i) {
+    for (size_t j = 0; j < columns; ++j) {
+      if (i == j) continue;
+      size_t tmp = vec[i*len + j];
+      vec[i*len + j] = vec[j*len + i];
+      vec[j*len + i] = tmp;
+    }
+  }
+}
+
+void HMM2D::Rotate(double d) {
+  vector<size_t> xy;
+  size_t num_states = states.size();
+  for (size_t i = 0; i < num_states; i++) {
+    for (size_t j = 0; j < num_states; j++) {
+      size_t ix, jx, iy, jy;
+      if (cos(d) < 0) {
+        ix = j;
+        jx = i;
+      } else {
+        ix = i;
+        jx = j;
+      }
+      if (sin(d) < 0) {
+        iy = j;
+        jy = i;
+      } else {
+        iy = i;
+        jy = j;
+      }
+      double sum = 0;
+      for (size_t k = 0; k < num_states; k++) {
+        size_t kx, ky;
+        size_t ikx, kjy;
+        if (cos(d) < 0) {
+          kx = i;
+          ikx = k;
+        } else {
+          kx = k;
+          ikx = i;
+        }
+        if (sin(d) < 0) {
+          ky = j;
+          kjy = k;
+        } else {
+          ky = k;
+          kjy = j;
+        }
+        sum += xtransition[num_states*ikx + kx]*ytransition[num_states*kjy + ky];
+      }
+      xy.push_back(sum);
+    }
+  }
+  vector<size_t> newx;
+  vector<size_t> newy;
+  for (size_t i = 0; i < num_states; i++) {
+    for (size_t j = 0; j < num_states; j++) {
+      size_t ix, jx, iy, jy;
+      if (cos(d) < 1e-10) {
+        ix = j;
+        jx = i;
+      } else {
+        ix = i;
+        jx = j;
+      }
+      if (sin(d) < 1e-10) {
+        iy = j;
+        jy = i;
+      } else {
+        iy = i;
+        jy = j;
+      }
+      if (abs(cos(d)) < 1e-10) {
+        newx.push_back(ytransitionwhole[iy*num_states + jy]);
+      } else if (abs(sin(d)) < 1e-10) {
+        newx.push_back(xtransitionwhole[ix*num_states + jx]);
+      } else {
+        double fy = ceil(abs(sin(d)/cos(d)) - 1);
+        double fx = ceil(abs(cos(d)/sin(d)) - 1);
+        newx.push_back((fy*ytransition[iy*num_states + jy] + fx*xtransitionwhole[ix*num_states + jx] + xy[i*num_states + j])/(fx + fy + 1));
+      }
+      double old = d;
+      d += M_PI/2;
+      if (cos(d) < 1e-10) {
+        ix = j;
+        jx = i;
+      } else {
+        ix = i;
+        jx = j;
+      }
+      if (sin(d) < 1e-10) {
+        iy = j;
+        jy = i;
+      } else {
+        iy = i;
+        jy = j;
+      }
+      if (abs(cos(d)) < 1e-10) {
+        newy.push_back(ytransitionwhole[iy*num_states + jy]);
+      } else if (abs(sin(d)) < 1e-10) {
+        newy.push_back(xtransitionwhole[ix*num_states + jx]);
+      } else {
+        double fy = ceil(abs(sin(d)/cos(d)) - 1);
+        double fx = ceil(abs(cos(d)/sin(d)) - 1);
+        newy.push_back((fy*ytransition[iy*num_states + jy] + fx*xtransition[ix*num_states + jx] + xy[i*num_states + j])/(fx + fy + 1));
+      }
+      d = old;
+    }
+  }
+  xtransitionwhole = newx;
+  ytransitionwhole = newy;
+  RowNormalize(this);
+}
+HMM2D::Ptr Calculate2DHMMReverse(PNG<PNG_FORMAT_GA>::Pixel *items, size_t *coords) {
+  HMM2D::Ptr retval = HMM2D::New();
+  HMM2D::PartialState last_depth = 0;
+  HMM2D::PartialState depth = 0;
+  bool starting = true;
+  bool initial = true;
+  vector<HMM2D::PartialState> xinitial_states;
+  vector<HMM2D::PartialTransition> xtransitions;
+  vector<HMM2D::PartialState> yinitial_states;
+  vector<HMM2D::PartialTransition> ytransitions;
+  for (size_t i = coords[0] - 1; i != numeric_limits<size_t>::max(); --i) {
+    for (size_t j = coords[1] - 1; j != numeric_limits<size_t>::max(); --j) {
+      depth = items[i*coords[0] + j].GetValue();
+      if (initial) xinitial_states.push_back(depth);
+      else xtransitions.push_back(HMM2D::PartialTransition(last_depth, depth));
+      retval->states.push_back(depth);
+      last_depth = depth;
+      initial = false;
+    }
+    initial = true;
+  }
+  for (size_t i = coords[1] - 1; i != numeric_limits<size_t>::max(); --i) {
+    for (size_t j = coords[0] - 1; j != numeric_limits<size_t>::max(); --j) {
+      depth = items[j*coords[0] + i].GetValue();
+      if (initial) yinitial_states.push_back(depth);
+      else ytransitions.push_back(HMM2D::PartialTransition(last_depth, depth));
+      last_depth = depth;
+      initial = false;
+    }
+    initial = true;
+  }
+  sort(retval->states.begin(), retval->states.end());
+  auto it = unique(retval->states.begin(), retval->states.end());
+  retval->states.resize(distance(retval->states.begin(), it));
+  retval->xtransition.resize(retval->states.size() * retval->states.size());
+  retval->ytransition.resize(retval->states.size() * retval->states.size());
+  retval->xinitial.resize(retval->states.size());
+  retval->yinitial.resize(retval->states.size());
+  fill(retval->xtransition.begin(), retval->xtransition.end(), 0);
+  fill(retval->ytransition.begin(), retval->ytransition.end(), 0);
+  fill(retval->xinitial.begin(), retval->xinitial.end(), 0);
+  fill(retval->yinitial.begin(), retval->yinitial.end(), 0);
+  for (auto it = retval->states.begin(); it != retval->states.end(); it++) {
+    retval->state_map[*it] = distance(retval->states.begin(), it);
+  }
+  for (auto it = xtransitions.begin(); it != xtransitions.end(); it++) {
+    retval->xtransition[retval->state_map[it->first]*retval->states.size() + retval->state_map[it->second]]++;
+  }
+  for (size_t i = 0; i < retval->states.size(); ++i) {
+    double sum = 0;
+    for (size_t j = 0; j < retval->states.size(); ++j) {
+      sum += retval->xtransition[i*retval->states.size() + j];
+    }
+    if (sum) for (size_t j = 0; j < retval->states.size(); ++j) {
+      retval->xtransition[i*retval->states.size() + j] /= sum;
+    }
+  }
+  for (auto it = xinitial_states.begin(); it != xinitial_states.end(); it++) {
+    retval->xinitial[retval->state_map[*it]]++;
+  }
+  double sum = 0;
+  for (size_t i = 0; i < retval->states.size(); ++i) {
+    sum += retval->xinitial[i];
+  }
+  if (sum) for (size_t i = 0; i < retval->states.size(); ++i) {
+    retval->xinitial[i] /= sum;
+  }
+  for (auto it = ytransitions.begin(); it != ytransitions.end(); it++) {
+    retval->ytransition[retval->state_map[it->first]*retval->states.size() + retval->state_map[it->second]]++;
+  }
+  for (size_t i = 0; i < retval->states.size(); ++i) {
+    double sum = 0;
+    for (size_t j = 0; j < retval->states.size(); ++j) {
+      sum += retval->ytransition[i*retval->states.size() + j];
+    }
+    if (sum) for (size_t j = 0; j < retval->states.size(); ++j) {
+      retval->ytransition[i*retval->states.size() + j] /= sum;
+    }
+  }
+  for (auto it = yinitial_states.begin(); it != yinitial_states.end(); it++) {
+    retval->yinitial[retval->state_map[*it]]++;
+  }
+  sum = 0;
+  for (size_t i = 0; i < retval->states.size(); ++i) {
+    sum += retval->yinitial[i];
+  }
+  if (sum) for (size_t i = 0; i < retval->states.size(); ++i) {
+    retval->yinitial[i] /= sum;
+  }
+  return retval;
 }

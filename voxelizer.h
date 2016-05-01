@@ -175,10 +175,39 @@ struct HMM2D {
   map<PartialState, size_t> state_map;
   vector<Observation> xobs;
   vector<Observation> yobs;
+  vector<size_t> xtransitionwhole;
+  vector<double> xtransition;
+  vector<double> xinitial;
+  vector<double> ytransition;
+  vector<size_t> ytransitionwhole;
+  vector<double> yinitial;
+  void Rotate(double);
+};
+
+struct HMM3D {
+  enum class Direction {
+    X, Y, Z
+  };
+  typedef shared_ptr<HMM3D> Ptr;
+  static Ptr New();
+  vector<double> &GetTransition(Direction);
+  vector<double> &GetInitial(Direction);
+  typedef uint8_t PartialState;
+  typedef size_t Observation;
+  vector<Observation> &GetObservations(Direction);
+  typedef pair<PartialState, PartialState> PartialTransition;
+  typedef vector<PartialState> State;
+  vector<PartialState> states;
+  map<PartialState, size_t> state_map;
+  vector<Observation> xobs;
+  vector<Observation> yobs;
   vector<double> xtransition;
   vector<double> xinitial;
   vector<double> ytransition;
   vector<double> yinitial;
+  vector<double> zinitial;
+  vector<double> ztransition;
+  void Rotate(double, double);
 };
 
 struct Permutation {
@@ -212,8 +241,10 @@ void PrintViterbiResult(ViterbiResult *vr);
 Permutation *EM(HMM2D::Ptr a, HMM2D::Direction d, size_t len, HMM2D::PartialState s);
 Permutation *EMMax(HMM2D::Ptr a, HMM2D::Direction d, size_t len);
 void WriteCircle(int x, int y, const char *filename);
+void WriteTriangle(int x, int y, const char *filename);
 json_object *HMM2DToJsonObject(HMM2D::Ptr);
 template <typename T> HMM2D::Ptr Calculate2DHMM(T *items, size_t *coords);
+HMM2D::Ptr Calculate2DHMMReverse(PNG<PNG_FORMAT_GA>::Pixel *items, size_t *coords);
 template <int format> void GenProjections(PNG<format> *, vector<HMM2D::Observation> &, vector<HMM2D::Observation> &);
 Viterbi2DResult *Viterbi2DMax(HMM2D::Ptr);
 Viterbi2DResult *Viterbi2D(HMM2D::Ptr, size_t, size_t, HMM2D::State &, HMM2D::State &, Viterbi2DResult *);
