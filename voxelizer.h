@@ -178,6 +178,10 @@ struct HMM2D {
   vector<size_t> xtransitionwhole;
   vector<double> xtransition;
   vector<double> xinitial;
+  vector<size_t> xcolsums;
+  vector<size_t> xrowsums;
+  vector<size_t> ycolsums;
+  vector<size_t> yrowsums;
   vector<double> ytransition;
   vector<size_t> ytransitionwhole;
   vector<double> yinitial;

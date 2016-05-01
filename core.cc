@@ -562,14 +562,22 @@ template <typename T> HMM2D::Ptr Calculate2DHMM(T *items, size_t *coords) {
   for (auto it = xtransitions.begin(); it != xtransitions.end(); it++) {
     retval->xtransition[retval->state_map[it->first]*retval->states.size() + retval->state_map[it->second]]++;
   }
-  for (auto it = retval->xtransitionwhole.begin(); it != retval->xtransitionwhole.end(); it++) {
+  for (auto it = retval->xtransition.begin(); it != retval->xtransition.end(); it++) {
     retval->xtransitionwhole.push_back(*it);
+  }
+  for (size_t j = 0; j < retval->states.size(); ++j) {
+      double sum = 0;
+      for (size_t i = 0; i < retval->states.size(); i++) {
+        sum += xtransitionwhole[i*retval->states.size() + j];
+      }
+      retval->xcolsums.push_back(sum);
   }
   for (size_t i = 0; i < retval->states.size(); ++i) {
     double sum = 0;
     for (size_t j = 0; j < retval->states.size(); ++j) {
       sum += retval->xtransition[i*retval->states.size() + j];
     }
+    retval->xrowsums.push_back(sum);
     if (sum) for (size_t j = 0; j < retval->states.size(); ++j) {
       retval->xtransition[i*retval->states.size() + j] /= sum;
     }
@@ -588,13 +596,21 @@ template <typename T> HMM2D::Ptr Calculate2DHMM(T *items, size_t *coords) {
     retval->ytransition[retval->state_map[it->first]*retval->states.size() + retval->state_map[it->second]]++;
   }
   for (auto it = retval->ytransition.begin(); it != retval->ytransition.end(); it++) {
-    retval->ytransition.push_back(*it);
+    retval->ytransitionwhole.push_back(*it);
+  }
+  for (size_t j = 0; j < retval->states.size(); ++j) {
+    double sum = 0;
+    for (size_t i = 0; i < retval->states.size(); ++i) {
+      sum += retval->ytransitionwhole[i*retval->states.size() + j];
+    }
+    retval->ycolsums.push_back(sum);
   }
   for (size_t i = 0; i < retval->states.size(); ++i) {
     double sum = 0;
     for (size_t j = 0; j < retval->states.size(); ++j) {
       sum += retval->ytransition[i*retval->states.size() + j];
     }
+    retval->yrowsums.push_back(sum);
     if (sum) for (size_t j = 0; j < retval->states.size(); ++j) {
       retval->ytransition[i*retval->states.size() + j] /= sum;
     }
@@ -1027,22 +1043,25 @@ void RowNormalize(HMM2D *a) {
       ysum += a->ytransitionwhole[i*a->states.size() + j];
     }
     for (size_t j = 0; j < a->states.size(); ++j) {
-      a->xtransition[i*a->states.size() + j] = a->xtransitionwhole[i*a->states.size() + j]/sum;
-      a->ytransition[i*a->states.size() + j] = a->ytransitionwhole[i*a->states.size() + j]/ysum;
+      a->xtransition[i*a->states.size() + j] = static_cast<double>(a->xtransitionwhole[i*a->states.size() + j])/sum;
+      a->ytransition[i*a->states.size() + j] = static_cast<double>(a->ytransitionwhole[i*a->states.size() + j])/ysum;
     }
   }
 } 
 
-void Transpose(vector<size_t> vec, size_t len) {
+void Transpose(vector<size_t> &vec, size_t len, vector<size_t> &xsums, &vector<size_t> ysums) {
   size_t columns = vec.size()/len;
   for (size_t i = 0; i < len; ++i) {
-    for (size_t j = 0; j < columns; ++j) {
+    for (size_t j = 0; j < (len - i); ++j) {
       if (i == j) continue;
       size_t tmp = vec[i*len + j];
-      vec[i*len + j] = vec[j*len + i];
-      vec[j*len + i] = tmp;
+      vec[i*len + j] = vec[j*len + i]*xsums[j]/ysums[i];
+      vec[j*len + i] = tmp*xsums[i]/ysums[j];
     }
   }
+  vector<size_t> tmp = xsums;
+  xsums = ysums;
+  ysums = tmp;
 }
 
 void HMM2D::Rotate(double d) {
@@ -1094,8 +1113,7 @@ void HMM2D::Rotate(double d) {
     for (size_t j = 0; j < num_states; j++) {
       size_t ix, jx, iy, jy;
       if (cos(d) < 1e-10) {
-        ix = j;
-        jx = i;
+        Transpose(xtransitionwhole, num_states, x
       } else {
         ix = i;
         jx = j;

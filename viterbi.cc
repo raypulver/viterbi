@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
   */
 //  hmm->Rotate(M_PI/2);
   //printf("%s\n\n", json_object_to_json_string(HMM2DToJsonObject(hmm)));
-  hmm->Rotate(M_PI/2);
+  hmm->Rotate(M_PI);
   json_object *obj = json_object_new_object();
   json_object_object_add(obj, "positive", HMM2DToJsonObject(hmm));
   json_object_object_add(obj, "negative", HMM2DToJsonObject(Calculate2DHMMReverse(png->GetPixelArray(), coords)));
