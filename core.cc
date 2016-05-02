@@ -1049,7 +1049,7 @@ void RowNormalize(HMM2D *a) {
   }
 } 
 
-void Transpose(vector<size_t> &vec, size_t len, vector<size_t> &xsums, &vector<size_t> ysums) {
+void Transpose(vector<size_t> &vec, size_t len, vector<size_t> &xsums, vector<size_t> &ysums) {
   size_t columns = vec.size()/len;
   for (size_t i = 0; i < len; ++i) {
     for (size_t j = 0; j < (len - i); ++j) {
@@ -1067,101 +1067,69 @@ void Transpose(vector<size_t> &vec, size_t len, vector<size_t> &xsums, &vector<s
 void HMM2D::Rotate(double d) {
   vector<size_t> xy;
   size_t num_states = states.size();
+  if (cos(d) < 0) Transpose(xtransitionwhole, num_states, xrowsums, xcolsums);
+  if (sin(d) < 0) Transpose(ytransitionwhole, num_states, yrowsums, ycolsums);
+  RowNormalize(this);
+  vector<size_t> xyrowsum;
+  vector<size_t> xycolsum;
   for (size_t i = 0; i < num_states; i++) {
     for (size_t j = 0; j < num_states; j++) {
-      size_t ix, jx, iy, jy;
-      if (cos(d) < 0) {
-        ix = j;
-        jx = i;
-      } else {
-        ix = i;
-        jx = j;
-      }
-      if (sin(d) < 0) {
-        iy = j;
-        jy = i;
-      } else {
-        iy = i;
-        jy = j;
-      }
       double sum = 0;
       for (size_t k = 0; k < num_states; k++) {
-        size_t kx, ky;
-        size_t ikx, kjy;
-        if (cos(d) < 0) {
-          kx = i;
-          ikx = k;
-        } else {
-          kx = k;
-          ikx = i;
-        }
-        if (sin(d) < 0) {
-          ky = j;
-          kjy = k;
-        } else {
-          ky = k;
-          kjy = j;
-        }
-        sum += xtransition[num_states*ikx + kx]*ytransition[num_states*kjy + ky];
+        sum += xtransition[num_states*i + k]*ytransition[num_states*k + j];
       }
       xy.push_back(sum);
+      xyrowsum.push_back(cos(d)*xrowsums[i] + sin(d)*yrowsums[j]);
+      xycolsum.push_back(cos(d)*xcolsums[i] + sin(d)*ycolsums[j]);
     }
   }
   vector<size_t> newx;
   vector<size_t> newy;
+  vector<size_t> newxrowsums;
+  vector<size_t> newxcolsums;
+  vector<size_t> newyrowsums;
+  vector<size_t> newycolsums;
   for (size_t i = 0; i < num_states; i++) {
     for (size_t j = 0; j < num_states; j++) {
-      size_t ix, jx, iy, jy;
-      if (cos(d) < 1e-10) {
-        Transpose(xtransitionwhole, num_states, x
-      } else {
-        ix = i;
-        jx = j;
-      }
-      if (sin(d) < 1e-10) {
-        iy = j;
-        jy = i;
-      } else {
-        iy = i;
-        jy = j;
-      }
       if (abs(cos(d)) < 1e-10) {
-        newx.push_back(ytransitionwhole[iy*num_states + jy]);
+        newx.push_back(ytransitionwhole[i*num_states + j]);
       } else if (abs(sin(d)) < 1e-10) {
-        newx.push_back(xtransitionwhole[ix*num_states + jx]);
+        newx.push_back(xtransitionwhole[i*num_states + j]);
       } else {
         double fy = ceil(abs(sin(d)/cos(d)) - 1);
         double fx = ceil(abs(cos(d)/sin(d)) - 1);
-        newx.push_back((fy*ytransition[iy*num_states + jy] + fx*xtransitionwhole[ix*num_states + jx] + xy[i*num_states + j])/(fx + fy + 1));
+        newx.push_back((fy*ytransition[i*num_states + j] + fx*xtransitionwhole[i*num_states + j] + xy[i*num_states + j])/(fx + fy + 1));
       }
       double old = d;
       d += M_PI/2;
-      if (cos(d) < 1e-10) {
-        ix = j;
-        jx = i;
-      } else {
-        ix = i;
-        jx = j;
-      }
-      if (sin(d) < 1e-10) {
-        iy = j;
-        jy = i;
-      } else {
-        iy = i;
-        jy = j;
-      }
+      if (cos(d)/sin(d) > 1) { 
       if (abs(cos(d)) < 1e-10) {
-        newy.push_back(ytransitionwhole[iy*num_states + jy]);
+        newy.push_back(ytransitionwhole[i*num_states + j]);
       } else if (abs(sin(d)) < 1e-10) {
-        newy.push_back(xtransitionwhole[ix*num_states + jx]);
+        newy.push_back(xtransitionwhole[i*num_states + j]);
       } else {
         double fy = ceil(abs(sin(d)/cos(d)) - 1);
         double fx = ceil(abs(cos(d)/sin(d)) - 1);
-        newy.push_back((fy*ytransition[iy*num_states + jy] + fx*xtransition[ix*num_states + jx] + xy[i*num_states + j])/(fx + fy + 1));
+        newy.push_back((fy*ytransition[i*num_states + j] + fx*xtransition[i*num_states + j] + xy[i*num_states + j])/(fx + fy + 1));
       }
       d = old;
     }
   }
+  if ((cos(d) < 1e-10) {
+        Transpose(xtransition, num_states, xrowsums, xcolsums);
+      }
+      if ((sin(d) < 1e-10 && sin(d + M_PI/2) > -1e-10) || (sin(d) > -1e-10 && sin(d + M_PI/2) < 1e-10)) {
+        Transpose(ytransition, num_states, yrowsums, ycolsums);
+      }
+  vector<size_t> newxrowsums;
+  vector<size_t> newxcolsums;
+  vector<size_t> newyrowsums;
+  vector<size_t> newycolsums;
+  for (size_t i = 0; i < num_states; ++i) {
+    for (size_t j = 0; j < num_states; ++j) {
+      newxrowsums.push_back(cos(d)*xrowsums[i] + sin(d)*yrowsums(d));
+      newxrowsums.push_back(cos(d)*yrowsums[i] + sin(d)*xrowsums[i]);
+    }
   xtransitionwhole = newx;
   ytransitionwhole = newy;
   RowNormalize(this);
