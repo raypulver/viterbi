@@ -24,28 +24,27 @@ int main(int argc, char **argv) {
   PNG<PNG_FORMAT_GA> *png = PNG<PNG_FORMAT_GA>::FromFile("littlecircle.png");
   size_t coords[2] = { (size_t) png->GetWidth(), (size_t) png->GetHeight() };
   HMM2D::Ptr hmm = Calculate2DHMM<PNG<PNG_FORMAT_GA>::Pixel>((PNG<PNG_FORMAT_GA>::Pixel *) png->GetPixelArray(), coords);
-  //GenProjections(png, hmm->xobs, hmm->yobs);
+  GenProjections(png, hmm->xobs, hmm->yobs);
   //printf("%s\n\n", json_object_to_json_string(HMM2DToJsonObject(hmm)));
 /*  hmm->Rotate(M_PI/4);
   printf("%s\n\n", json_object_to_json_string(HMM2DToJsonObject(hmm)));
   */
 //  hmm->Rotate(M_PI/2);
   //printf("%s\n\n", json_object_to_json_string(HMM2DToJsonObject(hmm)));
-  hmm->Rotate(M_PI);
   json_object *obj = json_object_new_object();
-  json_object_object_add(obj, "positive", HMM2DToJsonObject(hmm));
-  json_object_object_add(obj, "negative", HMM2DToJsonObject(Calculate2DHMMReverse(png->GetPixelArray(), coords)));
-  printf("%s\n", json_object_to_json_string(obj));
-  /*
+  json_object_object_add(obj, "original", HMM2DToJsonObject(hmm));
+  hmm->Rotate(M_PI/2);
+  json_object_object_add(obj, "rotated", HMM2DToJsonObject(hmm));
+  //printf("%s\n", json_object_to_json_string(obj));
+  
   Viterbi2DResult *result = Viterbi2DMax(hmm);
   PNG<PNG_FORMAT_GA> *reconstruction = Reconstruct(hmm, result);
   reconstruction->Write("result.png");
-  */
   } else if (mode == ROTATE) {
     cout << M_PI << endl;
     cout << sin(2*M_PI) << endl;
     cout << sin(4*M_PI) << endl;
   } else {
-    WriteTriangle(500, 500, "littlecircle.png");
+    WriteTriangle(16, 16, "littlecircle.png");
   }
 }
