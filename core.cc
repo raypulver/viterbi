@@ -16,6 +16,7 @@
 #include <json-c/json.h>
 #include "pdb.h"
 #include "voxelizer.h"
+#include "hmm.h"
 
 using namespace std;
 
@@ -94,7 +95,7 @@ void WriteCircle(int x, int y, const char *filename) {
 }
 
 bool InTriangle(int i, int x, int j, int y) {
-  if (i < x/2 && i > x/3 && j + 60 < y/3 && j + 50 > y/8) return true;
+  if (i < (double) x/2 && i > (double) x/3 && j < (double) y/3 && j > (double) y/8) return true;
   else return false;
 }
 void WriteTriangle(int x, int y, const char *filename) {
@@ -104,7 +105,7 @@ void WriteTriangle(int x, int y, const char *filename) {
       if (InTriangle(i, x, j, y)) {
         data[i*x + j].g = 175;
         data[i*x + j].a = 255;
-      } else if (InTriangle(i - 30, x, j - 30, y) || InTriangle(i + 10, x, j + 10, y)) {
+      } else if (InTriangle(i, x, j, y) || InTriangle(i + 1, x, j + 1, y)) {
         data[i*x + j].g = 120;
         data[i*x + j].a = 255;
       } else {
@@ -639,14 +640,90 @@ template <typename T> HMMGroup::Ptr CalculateHMMGroup(T *items, size_t *dimensio
   return retval;
 }
 
-Permutation *EMStartingWith(HMM2D::Ptr a, HMM2D::Direction d, size_t len, HMM2D::PartialState s) {
+Permutation *EMStartingWith(HMM2D::Ptr a, HMM2D::Direction d, size_t len, HMM2D::PartialState s, double threshold) {
   vector<double> backup = a->GetInitial(d);
   fill(a->GetInitial(d).begin(), a->GetInitial(d).end(), 0);
   a->GetInitial(d)[s] = 1;
-  Permutation* retval = EMMax(a, d, len + 1);
+  Permutation* retval = EMMax(a, d, len + 1, threshold);
   Permutation* starting = retval->last[0];
   a->GetInitial(d) = backup;
   return starting;
+}
+
+Permutation *EMMaxFront(HMM2D::Ptr a, HMM2D::Direction d, size_t len, double threshold) {
+  Permutation *retval = new Permutation();
+  Permutation *tmp = retval;
+  retval->probability = 100;
+  retval->state = 255;
+  for (size_t i = 0; i < a->states.size(); ++i) {
+    retval->last.push_back(EMFront(a, d, a->states[i], len, threshold));
+  }
+  return retval;
+}
+
+void CopyRow(vector<double> &dest, vector<double> &src, size_t len, size_t row) {
+  dest.empty();
+  dest.resize(len);
+  for (size_t i = 0; i < len; ++i) {
+    dest[i] = src[row*len + i];
+  }
+}
+
+void ForeachProbableCombinationOfLength(HMM2D::Ptr a, HMM2D::Direction d, size_t len, function<void(HMM2D::State &, double &)> fn, HMM2D::State &state, double &probability, double threshold) {
+  if (len == 0) { fn(state, probability); }
+  else {
+    for (size_t i = 0; i < a->states.size(); ++i) {
+      double thisprob;
+      if (!state.size()) {
+        thisprob = a->GetInitial(d)[i];
+      } else thisprob = a->GetTransition(d)[a->states.size()*a->state_map[state.back()] + i];
+      probability *= thisprob;
+      if (probability < threshold) {}
+      else {
+        state.push_back(a->states[i]);
+        ForeachProbableCombinationOfLength(a, d, len - 1, fn, state, probability, threshold);
+        state.pop_back();
+      }
+      probability /= thisprob;
+    }
+  }
+}
+          
+
+void ForeachProbableCombinationOfLength(HMM2D::Ptr a, HMM2D::Direction d, size_t len, function<void(HMM2D::State &, double &)> fn, double threshold) {
+  double prob = 1;
+  HMM2D::State state;
+  ForeachProbableCombinationOfLength(a, d, len, fn, state, prob, threshold);
+}
+
+Permutation *EMFrontImpl(HMM2D::Ptr a, HMM2D::Direction d, HMM2D::PartialState last, HMM2D::PartialState s, size_t len, double threshold, double current) {
+  Permutation *retval = new Permutation();
+  retval->state = 255;
+  retval->probability = 100;
+  if (!len) return retval;
+  double prob;
+  if (last == 255) prob = a->GetInitial(d)[a->state_map[s]];
+  else prob = a->GetTransition(d)[a->state_map[last]*a->states.size() + a->state_map[s]]*current;
+  if (prob < threshold) return retval;
+  retval->state = s;
+  retval->probability = prob;
+  if (len == 1) return retval;
+  for (size_t i = 0; a->states.size(); ++i) {
+    retval->last.push_back(EMFrontImpl(a, d, s, a->states[i], len - 1, threshold, retval->probability));
+  }
+  return retval;
+}
+  
+Permutation *EMFront(HMM2D::Ptr a, HMM2D::Direction d, HMM2D::PartialState s, size_t len, double threshold) {
+  return EMFrontImpl(a, d, 255, s, len, threshold, 1);
+}
+
+json_object *VectorToJsonObject(HMM2D::State &a) {
+  json_object *arr = json_object_new_array();
+  for (auto it = a.cbegin(); it != a.cend(); it++) {
+    json_object_array_add(arr, json_object_new_int(*it));
+  }
+  return arr;
 }
 
 void ForeachPermutation(Permutation *p, function<bool(HMM2D::State &, size_t, double)> fn, HMM2D::State &state, size_t &idx) {
@@ -658,10 +735,6 @@ void ForeachPermutation(Permutation *p, function<bool(HMM2D::State &, size_t, do
     state.resize(state.size() - 1);
   } else {
     if (p->state != 255) state.push_back(p->state);
-    for (auto it = p->last.begin(); it != p->last.end(); it++) {
-      ForeachPermutation(*it, fn, state, idx);
-    }
-    if (p->state != 255) state.resize(state.size() - 1);
     for (auto it = p->last.begin(); it != p->last.end(); it++) {
       ForeachPermutation(*it, fn, state, idx);
     }
@@ -693,122 +766,103 @@ double SumThe2DStateExceptFirst(HMM2D::State &state) {
   return sum;
 }
     
-double Prob(HMM2D::Ptr a, HMM2D::Direction d, HMM2D::State &state, size_t i, size_t j) {
-  double total = 0;
-  size_t sum = SumThe2DState(state);
-  int o;
+double Prob(HMM2D::Ptr a, HMM2D::Direction d, HMM2D::PartialState &state, size_t t) {
   if (d == HMM2D::Direction::X) {
-    o = a->GetObservations(d)[i];
-  } else o = a->GetObservations(d)[j];
-  o -= sum;
-  size_t len;
-  if (d == HMM2D::Direction::X) len = i;
-  else len = j;
-  if (o < 0) return 0;
-  vector<double> initial = a->GetInitial(d);
-  fill(a->GetInitial(d).begin(), a->GetInitial(d).end(), 0);
-  a->GetInitial(d)[state.back()] = 1;
-  Permutation *permute = EMMax(a, d, len - state.size());
-  ForeachPermutation(permute, [&] (HMM2D::State &state, size_t i, double probability) -> bool {
-    if (SumThe2DStateExceptFirst(state) == o) { total += probability; }
-    return true;
-  });
-  delete permute;
-  a->GetInitial(d) = initial;
-  return total;
+    if (a->xobs[t/a->xobs.size()] == 0 && state > 0) return 0;
+    else return 1;
+  } else {
+    if (a->yobs[t % a->xobs.size()] == 0 && state > 0) return 0;
+    else return 1;
+  }
 }
   
 Viterbi2DResult::~Viterbi2DResult() {
-  if (last) delete last;
+  if (lastx) delete lastx;
+  if (lasty) delete lasty;
 }
-   
-Viterbi2DResult *Viterbi2DMax(HMM2D::Ptr a) {
-  Permutation *xset = EMMax(a, HMM2D::Direction::X, a->xobs.size() - 1);
-  Permutation *yset = EMMax(a, HMM2D::Direction::Y, a->yobs.size() - 1);
+Viterbi2DResult *Viterbi2DMax(HMM2D::Ptr a, size_t t) {
   double max = 0;
   Viterbi2DResult *retval;
-  ForeachPermutation(xset, [&] (HMM2D::State xpartial, size_t, double) -> bool {
-    ForeachPermutation(yset, [&] (HMM2D::State ypartial, size_t, double) -> bool {
-      Viterbi2DResult *result = Viterbi2D(a, a->xobs.size(), a->yobs.size(), xpartial, ypartial, nullptr);
-      if (retval->probability > max) {
-        retval = result;
-	max = retval->probability;
-      }
-      return true;
-    });
-    return true;
-  });
+  for (size_t x = 0; x < a->states.size(); ++x) {
+    Viterbi2DResult *result = Viterbi2D(a, t, a->states[x]);
+    if (result->probability > max) {
+      max = result->probability;
+      retval = result;
+    } else delete result;
+  }
   return retval;
 }
 
-Viterbi2DResult *Viterbi2D(HMM2D::Ptr a, size_t s, size_t t, HMM2D::State &i, HMM2D::State &j, Viterbi2DResult *last) {
+
+Viterbi2DResult *Viterbi2D(HMM2D::Ptr a, size_t t, HMM2D::PartialState k) {
   Viterbi2DResult *result = new Viterbi2DResult();
-  result->probability = Prob(a, HMM2D::Direction::X, i, s, t)*Prob(a, HMM2D::Direction::Y, j, s, t);
-  if (!result->probability) return result;
+  result->probability = Prob(a, HMM2D::Direction::X, k, t)*Prob(a, HMM2D::Direction::Y, k, t);
+  double prob = result->probability;
+  if (result->probability == 0) return result;
   double max = 0;
-  Permutation *xset = EMMax(a, HMM2D::Direction::X, i.size() - 2);
-  Permutation *yset = EMMax(a, HMM2D::Direction::Y, j.size() - 2);
-  ForeachPermutation(xset, [&] (HMM2D::State xpartial, size_t xidx, double) -> bool {
-    ForeachPermutation(yset, [&] (HMM2D::State ypartial, size_t yidx, double) -> bool {
-      if (xpartial.back() != ypartial.back()) { return true; }
-      double xprob, yprob;
-      double overall;
-      if (s == 0 && t == 0) {
-        xprob = a->xinitial[a->state_map[xpartial.back()]];
-	yprob = a->yinitial[a->state_map[ypartial.back()]];
-	overall = xprob*yprob;
-	result->last = nullptr;
-	result->direction = HMM2D::Direction::X;
-      } else if (s == 0) {
-        xprob = a->xinitial[a->state_map[xpartial.back()]];
-	Viterbi2DResult *yviterbi = Viterbi2D(a, s, t - 1, i, ypartial, result);
-	overall = xprob*yviterbi->probability;
-	if (overall > max) {
-	  max = overall;
-	  result->x = xpartial;
-	  result->y = ypartial;
-	  result->last = yviterbi;
-	  result->direction = HMM2D::Direction::Y;
-	} else delete yviterbi;
-      } else if (t == 0) {
-        yprob = a->yinitial[a->state_map[ypartial.back()]];
-	Viterbi2DResult *xviterbi = Viterbi2D(a, s - 1, t, xpartial, j, result);
-	overall = yprob*xviterbi->probability;
-	if (overall > max) {
-          max = overall;
-	  result->x = xpartial;
-	  result->y = ypartial;
-	  result->last = xviterbi;
-	  result->direction = HMM2D::Direction::X;
-	}
-      }
-      Viterbi2DResult *xviterbi = Viterbi2D(a, s - 1, t, xpartial, j, result);
-      Viterbi2DResult *yviterbi = Viterbi2D(a, s, t - 1, i, ypartial, result);
-      xprob = a->xtransition[a->states.size()*a->state_map[xpartial.back()] + a->state_map[i.back()]]*xviterbi->probability;
-      yprob = a->ytransition[a->states.size()*a->state_map[ypartial.back()] + a->state_map[j.back()]]*yviterbi->probability;
-      overall = xprob*yprob;
+  if (t == 0) {
+    result->lastx = nullptr;
+    result->lasty = nullptr;
+    result->probability *= a->xinitial[a->state_map[k]]*a->yinitial[a->state_map[k]];
+    result->x = k;
+    result->y = k;
+    result->direction = HMM2D::Direction::X;
+    return result;
+  }
+  if (!(t % a->xobs.size())) {
+    result->lasty = nullptr;
+    result->direction = HMM2D::Direction::X;
+    for (size_t y = 0; y < a->states.size(); ++y) {
+      Viterbi2DResult *yviterbi = Viterbi2D(a, t - a->xobs.size(), a->states[y]);
+      double overall = prob*a->xinitial[a->state_map[k]]*a->ytransition[y*a->states.size() + a->state_map[k]]*yviterbi->probability;
       if (overall > max) {
-        max = overall;
-        result->x = xpartial;
-        result->y = ypartial;
-        if (yprob > xprob) {
-          result->direction = HMM2D::Direction::Y;
-          delete xviterbi;
-          result->last = yviterbi;
+        if (result->lasty) delete result->lasty;
+        result->lastx = nullptr;
+        result->lasty = yviterbi;
+        result->y = a->states[y];
+        result->probability = overall;
+      } else delete yviterbi;
+    }
+  } else if (t < a->xobs.size()) {
+    result->lastx = nullptr;
+    result->direction = HMM2D::Direction::Y;
+    for (size_t x = 0; x < a->states.size(); ++x) {
+      Viterbi2DResult *xviterbi = Viterbi2D(a, t - 1, a->states[x]);
+      double overall = prob*a->yinitial[a->state_map[k]]*a->xtransition[x*a->states.size() + a->state_map[k]]*xviterbi->probability;
+      if (overall > max) {
+        if (result->lastx) delete result->lastx;
+        result->lasty = nullptr;
+        result->lastx = xviterbi;
+        result->x = a->states[x];
+        result->probability = overall;
+      } else delete xviterbi;
+    }
+  } else {
+    for (size_t x = 0; x < a->states.size(); ++x) {
+      for (size_t y = 0; y < a->states.size(); ++y) {
+        Viterbi2DResult *xviterbi = Viterbi2D(a, t - 1, a->states[x]);
+        Viterbi2DResult *yviterbi = Viterbi2D(a, t - a->xobs.size(), a->states[y]);
+        double xprob = a->xtransition[a->states.size()*x + a->state_map[k]]*xviterbi->probability;
+        double yprob = a->ytransition[a->states.size()*y + a->state_map[k]]*yviterbi->probability;
+        double overall = prob*xprob*yprob;
+        if (overall > max) {
+          result->probability = overall;
+          result->x = a->states[x];
+          result->y = a->states[y];
+          result->lastx = xviterbi;
+          result->lasty = yviterbi;
+          if (xprob > yprob) {
+            result->direction = HMM2D::Direction::X;
+          } else {
+            result->direction = HMM2D::Direction::Y;
+          }
         } else {
-          result->direction = HMM2D::Direction::X;
+          delete xviterbi;
           delete yviterbi;
-          result->last = xviterbi;
         }
-      } else {
-        delete xviterbi;
-        delete yviterbi;
       }
-      return true;
-    });
-    return true;
-  });
-  result->probability *= max;
+    }
+  }
   return result;
 }
 
@@ -833,36 +887,36 @@ vector<HMM2D::Observation> &HMM2D::GetObservations(HMM2D::Direction d) {
   else return yobs;
 }
 
-Permutation *EMMax(HMM2D::Ptr a, HMM2D::Direction d, size_t len) {
+Permutation *EMMax(HMM2D::Ptr a, HMM2D::Direction d, size_t len, double threshold) {
   Permutation *result = new Permutation();
   result->probability = 100;
   result->state = 255;
   for (size_t i = 0; i < a->states.size(); ++i) {
-    Permutation *previous = EM(a, d, len, a->states[i]);
-    if (!previous->probability) {}
+    Permutation *previous = EM(a, d, len, a->states[i], threshold);
+    if (previous->probability < threshold) {}
     else result->last.push_back(previous);
   }
   return result;
 }
 
-Permutation *EM(HMM2D::Ptr a, HMM2D::Direction d, size_t len, HMM2D::PartialState s) {
+Permutation *EM(HMM2D::Ptr a, HMM2D::Direction d, size_t len, HMM2D::PartialState s, double threshold) {
   Permutation *result;
   if (!len) {
     result = new Permutation();
     result->state = s;
-    result->probability = a->GetInitial(d)[s];
+    result->probability = a->GetInitial(d)[a->state_map[s]];
     return result;
   }
   double max = 0;
   for (size_t i = 0; i < a->states.size(); i++) {
     result = new Permutation();
-    Permutation *previous = EM(a, d, len - 1, a->states[i]);
-    result->probability = a->GetTransition(d)[i*a->states.size() + s] * previous->probability;
+    Permutation *previous = EM(a, d, len - 1, a->states[i], threshold);
+    result->probability = a->GetTransition(d)[i*a->states.size() + a->state_map[s]] * previous->probability;
     if (result->probability > max) {
       max = result->probability;
       result->state = s;
     }
-    if (!result->probability) {
+    if (result->probability < threshold) {
       delete previous;
     }
     else result->last.push_back(previous);
@@ -1004,11 +1058,12 @@ template <int format> void GenProjections(PNG<format> *png, vector<HMM2D::Observ
 }
 
 template void GenProjections(PNG<PNG_FORMAT_GA> *, vector<HMM2D::Observation> &, vector<HMM2D::Observation> &);
+/*
 
 PNG<PNG_FORMAT_GA> *Reconstruct(HMM2D::Ptr a, Viterbi2DResult *result) {
   size_t x = a->xobs.size();
   size_t y = a->yobs.size();
-  PNG<PNG_FORMAT_GA>::Pixel *pxls = new PNG<PNG_FORMAT_GA>::Pixel[a->xobs.size()*a->yobs.size()];
+  PNG<PNG_FORMAT_GA>::Pixel *pxls = new PNG<PNG_FORMAT_GA>::Pixel[x*y];
   while (result->last) {
     for (size_t i = 0; i < result->x.size(); i++) {
       if (result->x[i] == 0) {
@@ -1033,6 +1088,7 @@ PNG<PNG_FORMAT_GA> *Reconstruct(HMM2D::Ptr a, Viterbi2DResult *result) {
   } else pxls[a->xobs.size()*x + y] = { result->x.back(), 0xff };
   return new PNG<PNG_FORMAT_GA>(a->xobs.size(), a->yobs.size(), pxls);
 }
+*/
 
 void RowNormalize(HMM2D *a) {
   for (size_t i = 0; i < a->states.size(); ++i) {
@@ -1063,6 +1119,16 @@ void Transpose(vector<size_t> &vec, size_t len, vector<size_t> &xsums, vector<si
   xsums = ysums;
   ysums = tmp;
 }
+
+void ExecutionCache::CalculateForAMatrix(HMM2D::Ptr a, double threshold) {
+  Permutation *p = EMMax(a, HMM2D::Direction::X, 8, numeric_limits<double>::min());
+  delete p;
+}
+void ExecutionCache::CalculateForAMatrixWithThreshold(HMM2D::Ptr a, double threshold) {
+  Permutation *p = EMMax(a, HMM2D::Direction::X, 8, 1e-3);
+  delete p;
+}
+static ExecutionCache cache;
 
 void HMM2D::Rotate(double d) {
   vector<size_t> xy;
@@ -1232,6 +1298,37 @@ HMM2D::Ptr Calculate2DHMMReverse(PNG<PNG_FORMAT_GA>::Pixel *items, size_t *coord
   }
   if (sum) for (size_t i = 0; i < retval->states.size(); ++i) {
     retval->yinitial[i] /= sum;
+  }
+  return retval;
+}
+
+hmm2d_t *HMM2DToC(HMM2D::Ptr a) {
+  size_t i, j;
+  hmm2d_t *retval = init_hmm2d();
+  retval->n = a->states.size();
+  retval->states = (size_t *) calloc(retval->n, sizeof(size_t));
+  retval->pix = init_vector(retval->n);
+  retval->piy = init_vector(retval->n);
+  for (i = 0; i < retval->n; ++i) {
+    retval->states[i] = a->states[i];
+    vector_push(retval->pix, a->xinitial[i]);
+    vector_push(retval->piy, a->yinitial[i]);
+  }
+  retval->ax = init_matrix(retval->n, retval->n);
+  retval->ay = init_matrix(retval->n, retval->n);
+  for (i = 0; i < retval->n; ++i) {
+    for (j = 0; j < retval->n; ++j) {
+      *matrix_el(retval->ax, i, j) = a->xtransition[i*retval->n + j];
+      *matrix_el(retval->ay, i, j) = a->ytransition[i*retval->n + j];
+    }
+  }
+  retval->xobs = init_vector(a->xobs.size());
+  for (i = 0; i < a->xobs.size(); ++i) {
+    vector_push(retval->xobs, a->xobs[i]);
+  }
+  retval->yobs = init_vector(a->yobs.size());
+  for (i = 0; i < a->yobs.size(); ++i) {
+    vector_push(retval->yobs, a->yobs[i]);
   }
   return retval;
 }

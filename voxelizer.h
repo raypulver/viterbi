@@ -17,6 +17,7 @@
 #include <libgen.h>
 #include <json-c/json.h>
 #include "pdb.h"
+#include "hmm.h"
 
 using namespace std;
 
@@ -223,9 +224,10 @@ struct Permutation {
 
 struct Viterbi2DResult {
   ~Viterbi2DResult();
-  Viterbi2DResult *last;
-  HMM2D::State x;
-  HMM2D::State y;
+  Viterbi2DResult *lastx;
+  Viterbi2DResult *lasty;
+  HMM2D::PartialState x;
+  HMM2D::PartialState y;
   HMM2D::Direction direction;
   double probability;
 };
@@ -242,15 +244,32 @@ json_object *StateToJsonObject(HMM::State s);
 
 void PrintViterbiResult(ViterbiResult *vr);
 
-Permutation *EM(HMM2D::Ptr a, HMM2D::Direction d, size_t len, HMM2D::PartialState s);
-Permutation *EMMax(HMM2D::Ptr a, HMM2D::Direction d, size_t len);
+Permutation *EM(HMM2D::Ptr a, HMM2D::Direction d, size_t len, HMM2D::PartialState s, double threshold);
+Permutation *EMMax(HMM2D::Ptr a, HMM2D::Direction d, size_t len, double threshold);
 void WriteCircle(int x, int y, const char *filename);
 void WriteTriangle(int x, int y, const char *filename);
 json_object *HMM2DToJsonObject(HMM2D::Ptr);
 template <typename T> HMM2D::Ptr Calculate2DHMM(T *items, size_t *coords);
 HMM2D::Ptr Calculate2DHMMReverse(PNG<PNG_FORMAT_GA>::Pixel *items, size_t *coords);
 template <int format> void GenProjections(PNG<format> *, vector<HMM2D::Observation> &, vector<HMM2D::Observation> &);
-Viterbi2DResult *Viterbi2DMax(HMM2D::Ptr);
-Viterbi2DResult *Viterbi2D(HMM2D::Ptr, size_t, size_t, HMM2D::State &, HMM2D::State &, Viterbi2DResult *);
+Viterbi2DResult *Viterbi2DMax(HMM2D::Ptr, size_t);
+Viterbi2DResult *Viterbi2D(HMM2D::Ptr, size_t, HMM2D::PartialState);
 PNG<PNG_FORMAT_GA> *Reconstruct(HMM2D::Ptr, Viterbi2DResult *);
+json_object *VectorToJsonObject(HMM2D::State &);
+void ForeachPermutation(Permutation *p, function<bool(HMM2D::State &, size_t, double)> fn);
+class ExecutionCache {
+  map<size_t, Permutation *> raw; 
+  map<size_t, vector<Permutation *>> beginning;
+  map<size_t, vector<Permutation *>> ending;
+  public:
+    void CalculateForAMatrix(HMM2D::Ptr, double);
+    void CalculateForAMatrixWithThreshold(HMM2D::Ptr, double);
+};
+Permutation *EMMaxFront(HMM2D::Ptr, HMM2D::Direction, size_t, double);
+Permutation *EMFront(HMM2D::Ptr, HMM2D::Direction, HMM2D::PartialState, size_t, double);
+Permutation *EMFrontImpl(HMM2D::Ptr a, HMM2D::Direction d, HMM2D::PartialState last, HMM2D::PartialState s, size_t len, double threshold, double current);
+
+double SumThe2DState(HMM2D::State &state);
+void ForeachProbableCombinationOfLength(HMM2D::Ptr a, HMM2D::Direction d, size_t len, function<void(HMM2D::State &, double &)> fn, double threshold);
+hmm2d_t *HMM2DToC(HMM2D::Ptr a);
 #endif

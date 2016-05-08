@@ -158,7 +158,7 @@ viterbi.o: viterbi.cc voxelizer.h \
   /usr/local/include/json-c/json_tokener.h \
   /usr/local/include/json-c/json_object_iterator.h \
   /usr/local/include/json-c/json_c_version.h pdb.h vmdplugin.h readpdb.h \
-  periodic_table.h largefiles.h molfile_plugin.h
+  periodic_table.h largefiles.h molfile_plugin.h hmm.h
 
 voxelizer.h:
 
@@ -619,3 +619,5 @@ periodic_table.h:
 largefiles.h:
 
 molfile_plugin.h:
+
+hmm.h:

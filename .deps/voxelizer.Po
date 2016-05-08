@@ -158,7 +158,7 @@ voxelizer.o: voxelizer.cc \
   /usr/local/include/json-c/json_tokener.h \
   /usr/local/include/json-c/json_object_iterator.h \
   /usr/local/include/json-c/json_c_version.h pdb.h vmdplugin.h readpdb.h \
-  periodic_table.h largefiles.h molfile_plugin.h voxelizer.h
+  periodic_table.h largefiles.h molfile_plugin.h voxelizer.h hmm.h
 
 /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/../include/c++/v1/limits:
 
@@ -619,3 +619,5 @@ largefiles.h:
 molfile_plugin.h:
 
 voxelizer.h:
+
+hmm.h:

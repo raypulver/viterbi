@@ -102,13 +102,13 @@ CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
 am_viterbi_OBJECTS = viterbi.$(OBJEXT) core.$(OBJEXT) \
-	pdbplugin.$(OBJEXT)
+	pdbplugin.$(OBJEXT) hmm.$(OBJEXT) cache.$(OBJEXT)
 viterbi_OBJECTS = $(am_viterbi_OBJECTS)
 am__DEPENDENCIES_1 =
 viterbi_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
 am_voxelizer_OBJECTS = voxelizer.$(OBJEXT) core.$(OBJEXT) \
-	pdbplugin.$(OBJEXT)
+	pdbplugin.$(OBJEXT) hmm.$(OBJEXT) cache.$(OBJEXT)
 voxelizer_OBJECTS = $(am_voxelizer_OBJECTS)
 voxelizer_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1)
@@ -296,9 +296,9 @@ top_srcdir = @top_srcdir@
 zlib_CFLAGS = @zlib_CFLAGS@
 zlib_LIBS = @zlib_LIBS@
 AM_CXXFLAGS = $(libpng_CFLAGS) $(zlib_CFLAGS) $(CFLAGS) -std=c++0x
-voxelizer_SOURCES = voxelizer.cc core.cc pdbplugin.c
+voxelizer_SOURCES = voxelizer.cc core.cc pdbplugin.c hmm.c cache.c
 voxelizer_LDADD = $(libpng_LIBS) $(zlib_LIBS) -ljson-c $(LDFLAGS)
-viterbi_SOURCES = viterbi.cc core.cc pdbplugin.c
+viterbi_SOURCES = viterbi.cc core.cc pdbplugin.c hmm.c cache.c
 viterbi_LDADD = $(libpng_LIBS) $(zlib_LIBS) -ljson-c $(LDFLAGS)
 all: all-am
 
@@ -394,7 +394,9 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cache.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/core.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/hmm.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pdbplugin.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/viterbi.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/voxelizer.Po@am__quote@
