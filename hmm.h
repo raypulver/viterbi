@@ -1,18 +1,20 @@
 #ifndef HMM_H
 #define HMM_H
+#define MPFR_PRECISION (1 << 7)
+#define MPFR_RND MPFR_RNDN
 
 #include <unistd.h>
-#include <quadmath.h>
+#include <mpfr.h>
 
 typedef struct _matrix_t {
-  long double *data;
+  mpfr_t *data;
   size_t alloc;
   size_t x;
   size_t y;
 } matrix_t;
 
 typedef struct _vector_t {
-  long double *data;
+  mpfr_t *data;
   size_t alloc;
   size_t len;
 } vector_t;
@@ -37,7 +39,7 @@ typedef struct _viterbi2d_result_t {
   size_t y;
   struct _viterbi2d_result_t *lastx;
   struct _viterbi2d_result_t *lasty;
-  long double probability;
+  mpfr_t probability;
 } viterbi2d_result_t;
 
 #ifdef __cplusplus
@@ -45,11 +47,11 @@ extern "C" {
 #endif
 
 matrix_t *init_matrix(size_t x, size_t y);
-long double *matrix_el(matrix_t *m, size_t x, size_t y);
+mpfr_t *matrix_el(matrix_t *m, size_t x, size_t y);
 vector_t *init_vector(size_t x);
 void vector_free(vector_t *vec);
 int vector_push(vector_t *vec, long double el);
-long double *vector_el(vector_t *vec, size_t i);
+mpfr_t *vector_el(vector_t *vec, size_t i);
 
 viterbi2d_result_t *init_viterbi2d_result();
 void viterbi2d_free(viterbi2d_result_t *res);

@@ -14,6 +14,7 @@
 #include <png.h>
 #include <libgen.h>
 #include <json-c/json.h>
+#include <mpfr.h>
 #include "pdb.h"
 #include "voxelizer.h"
 #include "hmm.h"
@@ -1320,8 +1321,8 @@ hmm2d_t *HMM2DToC(HMM2D::Ptr a) {
   retval->ay = init_matrix(retval->n, retval->n);
   for (i = 0; i < retval->n; ++i) {
     for (j = 0; j < retval->n; ++j) {
-      *matrix_el(retval->ax, i, j) = (long double) a->xtransition[i*retval->n + j];
-      *matrix_el(retval->ay, i, j) = (long double) a->ytransition[i*retval->n + j];
+      mpfr_set_d(*matrix_el(retval->ax, i, j), a->xtransition[i*retval->n + j], MPFR_RND);
+      mpfr_set_d(*matrix_el(retval->ay, i, j), a->ytransition[i*retval->n + j], MPFR_RND);
     }
   }
   retval->xobs = init_vector(a->xobs.size());
