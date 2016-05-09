@@ -3,6 +3,7 @@ Makefile
 
 # Compiled Object files
 .deps
+*.swp
 *.png
 *.slo
 *.lo
