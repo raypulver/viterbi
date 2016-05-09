@@ -20,16 +20,16 @@ matrix_t *init_matrix(size_t x, size_t y) {
 }
 
 vector_t *init_vector(size_t x) {
-	size_t i, last_alloc;
+  size_t i, last_alloc;
   vector_t *retval = (vector_t *) malloc(sizeof(vector_t));
   if (!retval) return retval;
-	last_alloc = retval->alloc;
+  last_alloc = retval->alloc;
   retval->alloc = x;
   retval->data = (mpfr_t *) calloc(retval->alloc, sizeof(mpfr_t));
-	for (i = 0; i < retval->alloc; ++i) {
-		mpfr_init2(retval->data[i], MPFR_PRECISION);
-		mpfr_set_ui(retval->data[i], 0, MPFR_RND);
-	}
+  for (i = 0; i < retval->alloc; ++i) {
+    mpfr_init2(retval->data[i], MPFR_PRECISION);
+    mpfr_set_ui(retval->data[i], 0, MPFR_RND);
+  }
   retval->len = 0;
   return retval;
 }
