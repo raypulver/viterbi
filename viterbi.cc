@@ -12,9 +12,11 @@ typedef enum _mode {
 
 void woop() {}
 static the_mode_t mode;
+static int size;
 int main(int argc, char **argv) {
   if (argc > 1) {
-    if (!strcmp(argv[argc - 1], "generate")) {
+    if (!strcmp(argv[argc - 2], "generate")) {
+      size = atoi(argv[argc - 1]);
       mode = GENERATE;
     } else if (!strcmp(argv[argc - 1], "solve")) {
       mode = SOLVE;
@@ -29,15 +31,16 @@ int main(int argc, char **argv) {
   GenProjections(png, hmm->xobs, hmm->yobs);
   cout << "Generated!" << endl;
   hmm2d_t *hmmc = HMM2DToC(hmm);
-  woop();
   double start = clock();
   viterbi2d_result_t *result = viterbi2d_max(hmmc);
+	print_hmm(hmmc);
+  woop();
   cout << clock() - start << endl;
   } else if (mode == ROTATE) {
     cout << M_PI << endl;
     cout << sin(2*M_PI) << endl;
     cout << sin(4*M_PI) << endl;
   } else {
-    WriteTriangle(256, 256, "littlecircle.png");
+    WriteTriangle(size, size, "littlecircle.png");
   }
 }

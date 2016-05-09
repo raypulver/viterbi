@@ -46,8 +46,8 @@ int check_cache(cache_t *cache) {
   size_t x, y;
   for (x = 0; x < cache->t; ++x) {
     for (y = 0; y < cache->k; ++y) {
-			if (!mpfr_zero_p((*cache_el(cache, x, y))->probability)) {
-				mpfr_printf("%zu %zu %R\n", x, y, (*cache_el(cache, x, y))->probability);
+			if (mpq_sgn((*cache_el(cache, x, y))->probability)) {
+				printf("%zu %zu %lf\n", x, y, mpq_get_d((*cache_el(cache, x, y))->probability));
 			}
     }
   }
