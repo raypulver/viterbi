@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <quadmath.h>
 #include "hmm.h"
 #include "cache.h"
 
@@ -69,6 +70,7 @@ long state_to_idx(hmm2d_t *hmm, size_t k) {
   }
   return -1;
 }
+static void woop() {}
 
 viterbi2d_result_t *viterbi2d(hmm2d_t *hmm, void *cache, size_t t, size_t k) {
   size_t x, y;
@@ -77,7 +79,9 @@ viterbi2d_result_t *viterbi2d(hmm2d_t *hmm, void *cache, size_t t, size_t k) {
   viterbi2d_result_t *xviterbi, *yviterbi, *retval;
   idx = state_to_idx(hmm, k);
   if (idx == -1) return NULL;
-  if ((retval = cache_get(cache, t, idx))) return retval;
+  if ((retval = cache_get(cache, t, idx))) {
+		return retval;
+	}
   retval = init_viterbi2d_result();
   if (t == 0) {
     retval->x = k;
@@ -128,93 +132,13 @@ viterbi2d_result_t *viterbi2d(hmm2d_t *hmm, void *cache, size_t t, size_t k) {
   return retval;
 }
 
-viterbi2d_result_t *viterbi2d_no_cache(hmm2d_t *hmm, size_t t, size_t k) {
-  size_t x, y;
-  long double max, xprob, yprob, overall;
-  long idx;
-  viterbi2d_result_t *xviterbi, *yviterbi, *retval;
-  idx = state_to_idx(hmm, k);
-  if (idx == -1) return NULL;
-  retval = init_viterbi2d_result();
-  if (t == 0) {
-    retval->x = k;
-    retval->y = k;
-    retval->probability = (*vector_el(hmm->pix, idx))*(*vector_el(hmm->piy, idx));
-  } else if (t < hmm->xobs->len) {
-    max = 0;
-    for (x = 0; x < hmm->n; ++x) {
-      xviterbi = viterbi2d_no_cache(hmm, t - 1, hmm->states[x]);
-      overall = xviterbi->probability*(*matrix_el(hmm->ax, x, idx))*(*vector_el(hmm->piy, idx));
-      if (overall > max) {
-        if (retval->lastx) free(retval->lastx);
-        retval->lastx = xviterbi;
-        retval->x = x;
-        retval->probability = overall;
-        max = overall;
-      } else viterbi2d_free(xviterbi);
-    }
-  } else if (!(t % hmm->xobs->len)) {
-    max = 0;
-    for (y = 0; y < hmm->n; ++y) {
-      yviterbi = viterbi2d_no_cache(hmm, t - hmm->xobs->len, hmm->states[y]);
-      overall = yviterbi->probability*(*matrix_el(hmm->ay, y, idx))*(*vector_el(hmm->pix, idx));
-      if (overall > max) {
-        if (retval->lasty) viterbi2d_free(retval->lasty);
-        retval->lasty = yviterbi;
-        retval->y = y;
-        retval->probability = overall;
-        max = overall;
-      } else viterbi2d_free(yviterbi);
-    }
-  } else {
-    max = 0;
-    for (x = 0; x < hmm->n; ++x) {
-      for (y = 0; y < hmm->n; ++y) {
-        xviterbi = viterbi2d_no_cache(hmm, t - 1, hmm->states[x]);
-        yviterbi = viterbi2d_no_cache(hmm, t - hmm->xobs->len, hmm->states[y]);
-        overall = xviterbi->probability*(*matrix_el(hmm->ax, x, idx)) * yviterbi->probability* (*matrix_el(hmm->ay, y, idx));
-        if (overall > max) {
-          if (retval->lastx) viterbi2d_free(retval->lastx);
-          if (retval->lasty) viterbi2d_free(retval->lasty);
-          retval->lastx = xviterbi;
-          retval->lasty = yviterbi;
-          retval->x = x;
-          retval->y = y;
-          retval->probability = overall;
-        }
-      }
-    }
-  }
-  return retval;
-}
-
-viterbi2d_result_t *viterbi2d_max_no_cache(hmm2d_t *hmm) {
-  size_t x;
-  long double max;
-  size_t len;
-  viterbi2d_result_t *result, *retval = NULL;
-  len = hmm->xobs->len*hmm->yobs->len;
-  max = 0;
-  for (x = 0; x < hmm->n; ++x) {
-    result = viterbi2d_no_cache(hmm, len, hmm->states[x]);
-    if (result->probability > max) {
-      if (retval) viterbi2d_free(retval);
-      retval = result;
-      max = result->probability;
-    } else viterbi2d_free(result);
-  }
-  return retval;
-} 
-
-static void woop () {}
-
 viterbi2d_result_t *viterbi2d_max(hmm2d_t *hmm) {
   size_t x;
   long double max;
   size_t len;
   cache_t *cache;
   viterbi2d_result_t *result, *retval = NULL;
-  len = hmm->xobs->len*hmm->yobs->len;
+  len = hmm->xobs->len*hmm->yobs->len - 1;
   cache = init_cache(len, hmm->n);
   max = 0;
   for (x = 0; x < hmm->n; ++x) {
@@ -224,7 +148,6 @@ viterbi2d_result_t *viterbi2d_max(hmm2d_t *hmm) {
       max = result->probability;
     }
   }
-  woop();
   check_cache(cache);
   cache_free(cache);
   return retval;

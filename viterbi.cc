@@ -10,6 +10,7 @@ typedef enum _mode {
   ROTATE
 } the_mode_t;
 
+static void woop() {}
 static the_mode_t mode;
 int main(int argc, char **argv) {
   if (argc > 1) {
@@ -43,6 +44,7 @@ int main(int argc, char **argv) {
   
   //Viterbi2DResult *result = Viterbi2DMax(hmm);
   hmm2d_t *hmmc = HMM2DToC(hmm);
+	woop();
   double start = clock();
   viterbi2d_result_t *result = viterbi2d_max(hmmc);
   cout << clock() - start << endl;

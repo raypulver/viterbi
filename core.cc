@@ -1301,6 +1301,7 @@ HMM2D::Ptr Calculate2DHMMReverse(PNG<PNG_FORMAT_GA>::Pixel *items, size_t *coord
   }
   return retval;
 }
+static void woop() {}
 
 hmm2d_t *HMM2DToC(HMM2D::Ptr a) {
   size_t i, j;
@@ -1311,15 +1312,16 @@ hmm2d_t *HMM2DToC(HMM2D::Ptr a) {
   retval->piy = init_vector(retval->n);
   for (i = 0; i < retval->n; ++i) {
     retval->states[i] = a->states[i];
-    vector_push(retval->pix, a->xinitial[i]);
-    vector_push(retval->piy, a->yinitial[i]);
+    vector_push(retval->pix, (long double) a->xinitial[i]);
+    vector_push(retval->piy, (long double) a->yinitial[i]);
+		woop();
   }
   retval->ax = init_matrix(retval->n, retval->n);
   retval->ay = init_matrix(retval->n, retval->n);
   for (i = 0; i < retval->n; ++i) {
     for (j = 0; j < retval->n; ++j) {
-      *matrix_el(retval->ax, i, j) = a->xtransition[i*retval->n + j];
-      *matrix_el(retval->ay, i, j) = a->ytransition[i*retval->n + j];
+      *matrix_el(retval->ax, i, j) = (long double) a->xtransition[i*retval->n + j];
+      *matrix_el(retval->ay, i, j) = (long double) a->ytransition[i*retval->n + j];
     }
   }
   retval->xobs = init_vector(a->xobs.size());

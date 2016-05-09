@@ -5,10 +5,10 @@
 
 cache_t *init_cache(size_t sz, size_t k) {
   cache_t *retval = (cache_t *) malloc(sizeof(cache_t));
-  retval->t = sz;
+  retval->t = sz + 1;
   retval->k = k;
-  retval->alloc = sz*k;
-  retval->data = (viterbi2d_result_t **) calloc(sz*k, sizeof(viterbi2d_result_t *));
+  retval->alloc = retval->t*k;
+  retval->data = (viterbi2d_result_t **) calloc(retval->t*k, sizeof(viterbi2d_result_t *));
   memset(retval->data, 0, sz*k*sizeof(viterbi2d_result_t *));
   return retval;
 }
@@ -43,9 +43,14 @@ void cache_empty(cache_t *cache) {
 
 int check_cache(cache_t *cache) {
   size_t x, y;
+	char buf[1024];
   for (x = 0; x < cache->t; ++x) {
     for (y = 0; y < cache->k; ++y) {
-      if ((*cache_el(cache, x, y))->probability) printf("%zu %zu %Lf\n", x, y, (*cache_el(cache, x, y))->probability);
+			memset(buf, 0, sizeof(buf));
+			if ((*cache_el(cache, x, y))->probability) {
+				quadmath_snprintf(buf, sizeof(buf), "%Qe\n", x, y, (*cache_el(cache, x, y))->probability);
+				printf("%s", buf);
+			}
     }
   }
   return 1;
