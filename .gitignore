@@ -2,6 +2,8 @@ config.log
 Makefile
 
 # Compiled Object files
+.deps
+*.png
 *.slo
 *.lo
 *.o
