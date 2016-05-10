@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include <json-c/json.h>
 #include "hmm.h"
 #include "cache.h"
 
@@ -18,10 +19,6 @@ matrix_t *init_matrix(size_t x, size_t y) {
 }
 
 void free_matrix(matrix_t *matrix) {
-  size_t i;
-	for (i = 0; i < matrix->alloc; ++i) {
-		mpq_clear(&matrix->data[i]);
-	}
 	free(matrix->data);
 	free(matrix);
 }
@@ -100,7 +97,6 @@ long double *matrix_el(matrix_t *m, size_t x, size_t y) {
 void viterbi2d_free(viterbi2d_result_t *res) {
   if (res->lastx) viterbi2d_free(res->lastx);
   if (res->lasty) viterbi2d_free(res->lasty);
-	mpq_clear(res->probability);
   free(res);
 }
 
@@ -240,11 +236,11 @@ void print_hmm(hmm2d_t *hmm) {
 		xrow = json_object_new_array();
 		yrow = json_object_new_array();
 		for (j = 0; j < hmm->n; ++j) {
-			json_object_array_add(xrow, json_object_new_double(mpq_get_d(matrix_el(hmm->ax, i, j))));
-			json_object_array_add(yrow, json_object_new_double(mpq_get_d(matrix_el(hmm->ay, i, j))));
+			json_object_array_add(xrow, json_object_new_double(*matrix_el(hmm->ax, i, j)));
+			json_object_array_add(yrow, json_object_new_double(*matrix_el(hmm->ay, i, j)));
 		}
-		json_object_array_add(pix, json_object_new_double(mpq_get_d(vector_el(hmm->pix, i))));
-		json_object_array_add(piy, json_object_new_double(mpq_get_d(vector_el(hmm->piy, i))));
+		json_object_array_add(pix, json_object_new_double(*vector_el(hmm->pix, i)));
+		json_object_array_add(piy, json_object_new_double(*vector_el(hmm->piy, i)));
 		json_object_array_add(axmatrix, xrow);
 		json_object_array_add(aymatrix, yrow);
 	}
