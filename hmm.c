@@ -1,8 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <json-c/json.h>
-#include <gmp.h>
+#include <math.h>
 #include "hmm.h"
 #include "cache.h"
 
@@ -13,10 +12,8 @@ matrix_t *init_matrix(size_t x, size_t y) {
   retval->alloc = x*y;
   retval->x = x;
   retval->y = y;
-  retval->data = (mpq_ptr) calloc(retval->alloc, sizeof(mpq_t));
-	for (i = 0; i < retval->alloc; ++i) {
-		mpq_init(&retval->data[i]);
-	}
+  retval->data = (long double *) calloc(retval->alloc, sizeof(long double));
+	memset(retval->data, 0, retval->alloc);
   return retval;
 }
 
@@ -35,52 +32,68 @@ vector_t *init_vector(size_t x) {
   if (!retval) return retval;
   last_alloc = retval->alloc;
   retval->alloc = x;
-  retval->data = (mpq_ptr) calloc(retval->alloc, sizeof(mpq_t));
-  for (i = 0; i < retval->alloc; ++i) {
-    mpq_init(&retval->data[i]);
-  }
+  retval->data = (long double *) calloc(retval->alloc, sizeof(long double));
+	memset(retval->data, 0, retval->alloc);
   retval->len = 0;
   return retval;
 }
 
-void vector_free(vector_t *vec) {
-	size_t i;
-	for (i = 0; i < vec->alloc; ++i) {
-		mpq_clear(&vec->data[i]);
-	}
-	free(vec->data);
-	free(vec);
+obs_vector_t *init_obs_vector(size_t x) {
+	size_t i, last_alloc;
+  obs_vector_t *retval = (obs_vector_t *) malloc(sizeof(obs_vector_t));
+  if (!retval) return retval;
+	last_alloc = retval->alloc;
+  retval->alloc = x;
+  retval->data = (size_t *) calloc(retval->alloc, sizeof(size_t));
+	memset(retval->data, 0, sizeof(size_t)*retval->alloc);
+  retval->len = 0;
+  return retval;
 }
-
 viterbi2d_result_t *init_viterbi2d_result() {
   viterbi2d_result_t *retval = (viterbi2d_result_t *) malloc(sizeof(viterbi2d_result_t));
   memset(retval, 0, sizeof(viterbi2d_result_t));
-	mpq_init(retval->probability);
-	mpq_set_ui(retval->probability, 0, 1);
   return retval;
 }
 
-static void woop() {}
-
-int vector_push(vector_t *vec, long double d) {
+int obs_vector_push(obs_vector_t *vec, size_t obs) {
   if (!vec) return 2;
   if (vec->len + 1 > vec->alloc) {
-    vec->data = (mpq_ptr) realloc(vec->data, (vec->alloc << 1)*sizeof(mpq_t));
+    vec->data = (size_t *) realloc(vec->data, (vec->alloc << 1)*sizeof(size_t));
     if (!vec->data) return 1;
     vec->alloc <<= 1;
   }
-  mpq_set_d(&vec->data[vec->len], d);
+  vec->data[vec->len] = obs;
+  vec->len++;
+  return 0;
+}
+int vector_push(vector_t *vec, long double d) {
+  if (!vec) return 2;
+  if (vec->len + 1 > vec->alloc) {
+    vec->data = (long double *) realloc(vec->data, (vec->alloc << 1)*sizeof(long double));
+    if (!vec->data) return 1;
+    vec->alloc <<= 1;
+  }
+  vec->data[vec->len] = d;
   vec->len++;
   return 0;
 }
 
-mpq_ptr vector_el(vector_t *vec, size_t i) {
+long double *vector_el(vector_t *vec, size_t i) {
   if (i < vec->len) {
     return &vec->data[i];
   } else return NULL;
 }
 
-mpq_ptr matrix_el(matrix_t *m, size_t x, size_t y) {
+void vector_free(vector_t *vec) {
+  free(vec->data);
+  free(vec);
+}
+void obs_vector_free(obs_vector_t *vec) {
+  free(vec->data);
+  free(vec);
+}
+
+long double *matrix_el(matrix_t *m, size_t x, size_t y) {
   return &m->data[x*m->y + y];
 }
 
@@ -98,9 +111,44 @@ long state_to_idx(hmm2d_t *hmm, size_t k) {
   }
   return -1;
 }
+
+double prob(hmm2d_t *hmm, cache_t *cache, size_t t, size_t k, int isx) {
+	size_t i, j, pos, remaining;
+	double weightedsum = 0, sum = 0;
+	if (isx) {
+		pos = t/hmm->yobs->len;
+		remaining = hmm->yobs->len - t % hmm->yobs->len;
+		for (i = pos*hmm->yobs->len; i < (pos + 1)*hmm->yobs->len; ++i) {
+			for (j = 0; j < hmm->n; ++j) {
+				if (*cache_el(cache, i, j)) {
+  			  weightedsum += hmm->states[j]*((*cache_el(cache, i, j))->probability);
+			  }
+			}
+		}
+	} else {
+		pos = t % hmm->yobs->len;
+		remaining = hmm->xobs->len - t/hmm->yobs->len;
+		for (i = pos; i < hmm->yobs->len*hmm->xobs->len; i += hmm->yobs->len) {
+			for (j = 0; j < hmm->n; ++j) {
+				if (*cache_el(cache, i, j)) {
+  				weightedsum += hmm->states[j]*(*cache_el(cache, i, j))->probability;
+				}
+			}
+		}
+	}
+	if (isx) {
+  	if (k <= hmm->xobs->data[pos] - weightedsum) return 1;
+		else return 0;
+	} else {
+		if (k <= hmm->yobs->data[pos] - weightedsum) return 1;
+		else return 0;
+	}
+}
+
+  
 viterbi2d_result_t *viterbi2d(hmm2d_t *hmm, void *cache, size_t t, size_t k) {
   size_t x, y;
-  mpq_t max, overall;
+  long double max, overall;
   long idx;
 	int cmp;
   viterbi2d_result_t *xviterbi, *yviterbi, *retval;
@@ -109,39 +157,33 @@ viterbi2d_result_t *viterbi2d(hmm2d_t *hmm, void *cache, size_t t, size_t k) {
   if ((retval = cache_get(cache, t, idx))) {
 		return retval;
 	}
-	mpq_init(max);
-	mpq_set_ui(max, 0, 1);
-	mpq_init(overall);
+	max = 0;
   retval = init_viterbi2d_result();
+	retval->probability = prob(hmm, cache, t, k, 1)*prob(hmm, cache, t, k, 0);
   if (t == 0) {
     retval->x = k;
     retval->y = k;
-    mpq_mul(retval->probability, vector_el(hmm->pix, idx), vector_el(hmm->piy, idx));
-		mpq_canonicalize(retval->probability);
+    retval->probability = sqrt(retval->probability*(*vector_el(hmm->pix, idx))*(*vector_el(hmm->piy, idx)));
   } else if (t < hmm->xobs->len) {
     for (x = 0; x < hmm->n; ++x) {
       xviterbi = viterbi2d(hmm, cache, t - 1, hmm->states[x]);
-      mpq_mul(overall, xviterbi->probability, matrix_el(hmm->ax, x, idx));
-			mpq_mul(overall, overall, vector_el(hmm->piy, idx));
-			mpq_canonicalize(overall);
-      if ((cmp = mpq_cmp(overall, max)) > 0) {
+      overall = sqrt(retval->probability*xviterbi->probability*(*matrix_el(hmm->ax, x, idx))*(*vector_el(hmm->piy, idx)));
+      if (overall > max || (overall == max && !x)) {
         retval->lastx = xviterbi;
         retval->x = x;
-        mpq_set(retval->probability, overall);
-        mpq_swap(max, overall);
+        retval->probability = overall;
+        max = overall;
       }
     }
   } else if (!(t % hmm->xobs->len)) {
     for (y = 0; y < hmm->n; ++y) {
       yviterbi = viterbi2d(hmm, cache, t - hmm->xobs->len, hmm->states[y]);
-      mpq_mul(overall, yviterbi->probability, matrix_el(hmm->ay, y, idx));
-			mpq_mul(overall, overall, vector_el(hmm->pix, idx));
-			mpq_canonicalize(overall);
-      if ((cmp = mpq_cmp(overall, max)) > 0) {
+      overall = sqrt(retval->probability*yviterbi->probability*(*matrix_el(hmm->ay, y, idx))*(*vector_el(hmm->pix, idx)));
+			if (overall > max || (overall == max && !y)) {
         retval->lasty = yviterbi;
         retval->y = y;
-        mpq_set(retval->probability, overall);
-        mpq_swap(max, overall);
+        retval->probability = overall;
+        max = overall;
       }
     }
   } else {
@@ -149,19 +191,14 @@ viterbi2d_result_t *viterbi2d(hmm2d_t *hmm, void *cache, size_t t, size_t k) {
       for (y = 0; y < hmm->n; ++y) {
         xviterbi = viterbi2d(hmm, cache, t - 1, hmm->states[x]);
         yviterbi = viterbi2d(hmm, cache, t - hmm->xobs->len, hmm->states[y]);
-        mpq_mul(overall, xviterbi->probability, matrix_el(hmm->ax, x, idx));
-				mpq_canonicalize(overall);
-			  mpq_mul(overall, overall, yviterbi->probability);
-				mpq_canonicalize(overall);
-				mpq_mul(overall, overall, matrix_el(hmm->ay, y, idx));
-				mpq_canonicalize(overall);
-        if ((cmp = mpq_cmp(overall, max)) > 0) {
+				overall = sqrt(retval->probability*xviterbi->probability*(*matrix_el(hmm->ax, x, idx))*yviterbi->probability*(*matrix_el(hmm->ay, y, idx)));
+        if (overall > max || (overall == max && !x && !y)) {
           retval->lastx = xviterbi;
           retval->lasty = yviterbi;
           retval->x = x;
           retval->y = y;
-          mpq_set(retval->probability, overall);
-					mpq_swap(max, overall);
+          retval->probability = overall;
+					max = overall;
         }
       }
     }
@@ -172,20 +209,18 @@ viterbi2d_result_t *viterbi2d(hmm2d_t *hmm, void *cache, size_t t, size_t k) {
 
 viterbi2d_result_t *viterbi2d_max(hmm2d_t *hmm) {
   size_t x;
-  mpq_t max;
+  long double max;
   size_t len;
   cache_t *cache;
-	int cmp;
   viterbi2d_result_t *result, *retval = NULL;
+	max = 0;
   len = hmm->xobs->len*hmm->yobs->len - 1;
   cache = init_cache(len, hmm->n);
-	mpq_init(max);
-	mpq_set_ui(max, 0, 1);
   for (x = 0; x < hmm->n; ++x) {
     result = viterbi2d(hmm, cache, len, hmm->states[x]);
-    if ((cmp = mpq_cmp(result->probability, max)) > 0) {
+    if (result->probability > max || (result->probability == max && !x)) {
       retval = result;
-      mpq_set(max, result->probability);
+			max = result->probability;
     }
   }
   check_cache(cache);

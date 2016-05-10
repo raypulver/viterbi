@@ -17,6 +17,7 @@ extern "C" {
 
 cache_t *init_cache(size_t sz, size_t k);
 void cache_free(cache_t *cache);
+viterbi2d_result_t **cache_el(cache_t *cache, size_t t, size_t k);
 viterbi2d_result_t *cache_get(cache_t *cache, size_t t, size_t k);
 void cache_put(cache_t *cache, size_t t, size_t k, viterbi2d_result_t *res);
 void cache_empty(cache_t *cache);

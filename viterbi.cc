@@ -1,6 +1,7 @@
 #include "voxelizer.h"
 #include <cmath>
 #include <iostream>
+#include <getopt.h>
 #include <json-c/json.h>
 #include "hmm.h"
 using namespace std;
@@ -12,12 +13,12 @@ typedef enum _mode {
 
 void woop() {}
 static the_mode_t mode;
-static int size;
+static int dim = 0;
 int main(int argc, char **argv) {
   if (argc > 1) {
     if (!strcmp(argv[argc - 2], "generate")) {
-      size = atoi(argv[argc - 1]);
       mode = GENERATE;
+			dim = atoi(argv[argc - 1]);
     } else if (!strcmp(argv[argc - 1], "solve")) {
       mode = SOLVE;
     } else {
@@ -41,6 +42,6 @@ int main(int argc, char **argv) {
     cout << sin(2*M_PI) << endl;
     cout << sin(4*M_PI) << endl;
   } else {
-    WriteTriangle(size, size, "littlecircle.png");
+    WriteTriangle(dim, dim, "littlecircle.png");
   }
 }

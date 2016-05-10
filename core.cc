@@ -14,7 +14,6 @@
 #include <png.h>
 #include <libgen.h>
 #include <json-c/json.h>
-#include <mpfr.h>
 #include "pdb.h"
 #include "voxelizer.h"
 #include "hmm.h"
@@ -1045,14 +1044,14 @@ template <int format> void GenProjections(PNG<format> *png, vector<HMM2D::Observ
   for (size_t i = 0; i < png->GetWidth(); ++i) {
     HMM2D::State tmp;
     for (size_t j = 0; j < png->GetHeight(); ++j) {
-      tmp.push_back(pixels[i*png->GetWidth() + j].g);
+      tmp.push_back(pixels[i*png->GetHeight() + j].g);
     }
     xobs.push_back(SumThe2DState(tmp));
   }
   for (size_t j = 0; j < png->GetHeight(); ++j) {
     HMM2D::State tmp;
     for (size_t i = 0; i < png->GetWidth(); ++i) {
-      tmp.push_back(pixels[i*png->GetWidth() + j].g);
+      tmp.push_back(pixels[i*png->GetHeight() + j].g);
     }
     yobs.push_back(SumThe2DState(tmp));
   }
@@ -1319,17 +1318,17 @@ hmm2d_t *HMM2DToC(HMM2D::Ptr a) {
   retval->ay = init_matrix(retval->n, retval->n);
   for (i = 0; i < retval->n; ++i) {
     for (j = 0; j < retval->n; ++j) {
-      mpq_set_d(matrix_el(retval->ax, i, j), a->xtransition[i*retval->n + j]);
-      mpq_set_d(matrix_el(retval->ay, i, j), a->ytransition[i*retval->n + j]);
+      *matrix_el(retval->ax, i, j) = a->xtransition[i*retval->n + j];
+      *matrix_el(retval->ay, i, j) = a->ytransition[i*retval->n + j];
     }
   }
-  retval->xobs = init_vector(a->xobs.size());
+  retval->xobs = init_obs_vector(a->xobs.size());
   for (i = 0; i < a->xobs.size(); ++i) {
-    vector_push(retval->xobs, a->xobs[i]);
+    obs_vector_push(retval->xobs, a->xobs[i]);
   }
-  retval->yobs = init_vector(a->yobs.size());
+  retval->yobs = init_obs_vector(a->yobs.size());
   for (i = 0; i < a->yobs.size(); ++i) {
-    vector_push(retval->yobs, a->yobs[i]);
+    obs_vector_push(retval->yobs, a->yobs[i]);
   }
   return retval;
 }
