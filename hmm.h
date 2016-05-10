@@ -57,6 +57,7 @@ void obs_vector_free(obs_vector_t *vec);
 int vector_push(vector_t *vec, long double el);
 int obs_vector_push(obs_vector_t *vec, size_t el);
 long double *vector_el(vector_t *vec, size_t i);
+size_t *obs_vector_el(obs_vector_t *vec, size_t i);
 
 viterbi2d_result_t *init_viterbi2d_result();
 void viterbi2d_free(viterbi2d_result_t *res);

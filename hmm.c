@@ -81,6 +81,12 @@ long double *vector_el(vector_t *vec, size_t i) {
   } else return NULL;
 }
 
+size_t *obs_vector_el(obs_vector_t *vec, size_t i) {
+  if (i < vec->len) {
+    return &vec->data[i];
+  } else return NULL;
+}
+
 void vector_free(vector_t *vec) {
   free(vec->data);
   free(vec);
@@ -230,7 +236,7 @@ hmm2d_t *init_hmm2d() {
 }
 void print_hmm(hmm2d_t *hmm) {
 	size_t i, j;
-	json_object *retval, *xrow, *yrow, *pix = json_object_new_array(), *axmatrix = json_object_new_array(), *piy = json_object_new_array(), *aymatrix = json_object_new_array();
+	json_object *retval, *xrow, *yrow, *pix = json_object_new_array(), *axmatrix = json_object_new_array(), *piy = json_object_new_array(), *aymatrix = json_object_new_array(), *xobs = json_object_new_array(), *yobs = json_object_new_array();
   retval = json_object_new_object();
 	for (i = 0; i < hmm->n; ++i) {
 		xrow = json_object_new_array();
@@ -244,10 +250,16 @@ void print_hmm(hmm2d_t *hmm) {
 		json_object_array_add(axmatrix, xrow);
 		json_object_array_add(aymatrix, yrow);
 	}
+	for (i = 0; i < hmm->xobs->len; ++i) {
+		json_object_array_add(xobs, json_object_new_int(*obs_vector_el(hmm->xobs, i)));
+		json_object_array_add(yobs, json_object_new_int(*obs_vector_el(hmm->yobs, i)));
+	}
 	json_object_object_add(retval, "pix", pix);
 	json_object_object_add(retval, "piy", piy);
 	json_object_object_add(retval, "xtransition", axmatrix);
 	json_object_object_add(retval, "ytransition", aymatrix);
+	json_object_object_add(retval, "xobs", xobs);
+	json_object_object_add(retval, "yobs", yobs);
 	printf("%s", json_object_to_json_string(retval));
 	json_object_put(retval);
 }
