@@ -2,6 +2,9 @@ config.log
 Makefile
 
 # Compiled Object files
+.color_coded
+littlecircle.png
+.ycm*
 .deps
 *.swp
 *.png
