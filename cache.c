@@ -1,7 +1,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <mpfr.h>
 #include "cache.h"
 
 cache_t *init_cache(size_t sz, size_t k) {
@@ -46,8 +45,8 @@ int check_cache(cache_t *cache) {
   size_t x, y;
   for (x = 0; x < cache->t; ++x) {
     for (y = 0; y < cache->k; ++y) {
-			if (!mpfr_zero_p((*cache_el(cache, x, y))->probability)) {
-				mpfr_printf("%zu %zu %R\n", x, y, (*cache_el(cache, x, y))->probability);
+			if ((*cache_el(cache, x, y))->probability) {
+				printf("%zu %zu %lf\n", x, y, (double) (*cache_el(cache, x, y))->probability);
 			}
     }
   }

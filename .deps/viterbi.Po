@@ -179,8 +179,7 @@ viterbi.o: viterbi.cc /usr/include/stdc-predef.h voxelizer.h \
  /usr/include/json-c/json_object_iterator.h \
  /usr/include/json-c/json_c_version.h pdb.h vmdplugin.h readpdb.h \
  /usr/include/string.h /usr/include/x86_64-linux-gnu/bits/string3.h \
- periodic_table.h largefiles.h molfile_plugin.h hmm.h /usr/include/mpfr.h \
- /usr/local/include/gmp.h
+ periodic_table.h largefiles.h molfile_plugin.h hmm.h
 
 /usr/include/stdc-predef.h:
 
@@ -663,7 +662,3 @@ largefiles.h:
 molfile_plugin.h:
 
 hmm.h:
-
-/usr/include/mpfr.h:
-
-/usr/local/include/gmp.h:
