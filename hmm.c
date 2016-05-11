@@ -3,6 +3,7 @@
 #include <string.h>
 #include <math.h>
 #include <json-c/json.h>
+#include <png.h>
 #include "hmm.h"
 #include "cache.h"
 
@@ -148,7 +149,7 @@ double prob(hmm2d_t *hmm, cache_t *cache, size_t t, size_t k, int isx) {
 }
 
   
-viterbi2d_result_t *viterbi2d(hmm2d_t *hmm, void *cache, size_t t, size_t k) {
+viterbi2d_result_t *viterbi2d(hmm2d_t *hmm, cache_t *cache, size_t t, size_t k) {
   size_t x, y;
   long double max, overall;
   long idx;
@@ -156,7 +157,7 @@ viterbi2d_result_t *viterbi2d(hmm2d_t *hmm, void *cache, size_t t, size_t k) {
   viterbi2d_result_t *xviterbi, *yviterbi, *retval;
   idx = state_to_idx(hmm, k);
   if (idx == -1) return NULL;
-  if ((retval = cache_get(cache, t, idx))) {
+  if ((retval = *cache_el(cache, t, idx))) {
 		return retval;
 	}
 	max = 0;
@@ -209,24 +210,21 @@ viterbi2d_result_t *viterbi2d(hmm2d_t *hmm, void *cache, size_t t, size_t k) {
   return retval;
 }
 
-viterbi2d_result_t *viterbi2d_max(hmm2d_t *hmm) {
+viterbi2d_result_t *viterbi2d_max(hmm2d_t *hmm, cache_t **cache) {
   size_t x;
   long double max;
   size_t len;
-  cache_t *cache;
   viterbi2d_result_t *result, *retval = NULL;
 	max = 0;
   len = hmm->xobs->len*hmm->yobs->len - 1;
-  cache = init_cache(len, hmm->n);
+  *cache = init_cache(len, hmm->n);
   for (x = 0; x < hmm->n; ++x) {
-    result = viterbi2d(hmm, cache, len, hmm->states[x]);
+    result = viterbi2d(hmm, *cache, len, hmm->states[x]);
     if (result->probability > max || (result->probability == max && !x)) {
       retval = result;
 			max = result->probability;
     }
   }
-  check_cache(cache);
-  cache_free(cache);
   return retval;
 } 
 hmm2d_t *init_hmm2d() {
@@ -262,4 +260,57 @@ void print_hmm(hmm2d_t *hmm) {
 	json_object_object_add(retval, "yobs", yobs);
 	printf("%s", json_object_to_json_string(retval));
 	json_object_put(retval);
+}
+
+typedef struct _pixel_t {
+  uint8_t g;
+  uint8_t a;
+} pixel_t;
+
+void reconstruct_impl(hmm2d_t *hmm, pixel_t *pixels, viterbi2d_result_t *result, cache_t *cache, size_t t) {
+  size_t x, y;
+  x = t/hmm->yobs->len;
+  y = t % hmm->yobs->len;
+  cache_el_mark(cache, t);
+  if (x > 0 && !cache_el_is_marked(cache, (x - 1)*hmm->yobs->len + y)) {
+    pixels[(x - 1)*hmm->yobs->len + y].g = hmm->states[result->x];
+    if (!pixels[(x - 1)*hmm->yobs->len + y].g) pixels[(x - 1)*hmm->yobs->len + y].a = 0;
+    else pixels[(x - 1)*hmm->yobs->len + y].a = 255;
+    reconstruct_impl(hmm, pixels, result->lastx, cache, (x - 1)*hmm->yobs->len + y);
+  }
+  if (y > 0 && !cache_el_is_marked(cache, x*hmm->yobs->len + y - 1)) {
+    pixels[x*hmm->yobs->len + y - 1].g = hmm->states[result->y];
+    if (!pixels[x*hmm->yobs->len + y - 1].g) pixels[x*hmm->yobs->len + y - 1].a = 0;
+    else pixels[(x - 1)*hmm->yobs->len + y].a = 255;
+    reconstruct_impl(hmm, pixels, result->lasty, cache, x*hmm->yobs->len + y - 1);
+  }
+}
+
+void reconstruct(hmm2d_t *hmm, cache_t *cache, const char *filename) {
+  size_t i, k;
+  long double max, probl;
+  png_image img;
+  viterbi2d_result_t *result, *start;
+  img.width = hmm->xobs->len;
+  img.height = hmm->yobs->len;
+  img.opaque = NULL;
+  img.format = PNG_FORMAT_GA;
+  img.version = PNG_IMAGE_VERSION;
+  img.flags = 0;
+  img.colormap_entries = 0;
+  pixel_t *pixels = (pixel_t *) calloc(img.width*img.height, sizeof(pixel_t));
+  for (i = 0; i < hmm->n; ++i) {
+    result = *cache_el(cache, img.width*img.height - 1, i);
+    if (result->probability > max) {
+      k = i;
+      max = probl;
+      start = result;
+    }
+  }
+  pixels[img.height*img.width - 1].g = hmm->states[k];
+  if (!pixels[img.height*img.width - 1].g) pixels[img.height*img.width - 1].a = 0;
+  else pixels[img.height*img.width - 1].a = 255;
+  cache_el_mark(cache, img.height*img.width - 1);
+  reconstruct_impl(hmm, pixels, start, cache, img.width*img.height - 1);
+  png_image_write_to_file(&img, filename, 0, (void *) pixels, 0, NULL);
 }

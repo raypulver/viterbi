@@ -4,6 +4,7 @@
 #include <getopt.h>
 #include <json-c/json.h>
 #include "hmm.h"
+#include "cache.h"
 using namespace std;
 typedef enum _mode {
   GENERATE,
@@ -33,8 +34,12 @@ int main(int argc, char **argv) {
   cout << "Generated!" << endl;
   hmm2d_t *hmmc = HMM2DToC(hmm);
   double start = clock();
-  viterbi2d_result_t *result = viterbi2d_max(hmmc);
-	print_hmm(hmmc);
+  cache_t *cache;
+  viterbi2d_result_t *result = viterbi2d_max(hmmc, &cache);
+  reconstruct(hmmc, cache, "reconstruction.png");
+  check_cache(cache);
+  cache_free(cache);
+  print_hmm(hmmc);
   woop();
   cout << clock() - start << endl;
   } else if (mode == ROTATE) {

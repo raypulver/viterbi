@@ -1,6 +1,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdint.h>
 #include "cache.h"
 
 cache_t *init_cache(size_t sz, size_t k) {
@@ -8,14 +9,22 @@ cache_t *init_cache(size_t sz, size_t k) {
   retval->t = sz + 1;
   retval->k = k;
   retval->alloc = retval->t*k;
-  retval->data = (viterbi2d_result_t **) calloc(retval->t*k, sizeof(viterbi2d_result_t *));
-  memset(retval->data, 0, sz*k*sizeof(viterbi2d_result_t *));
+  retval->data = (cache_entry_t *) calloc(retval->t*k, sizeof(cache_entry_t));
+  memset(retval->data, 0, sz*k*sizeof(cache_entry_t));
   return retval;
 }
 
 viterbi2d_result_t **cache_el(cache_t *cache, size_t t, size_t k) {
   if (t > cache->t || k > cache->k) return NULL;
-  return &cache->data[t*cache->k + k];
+  return &cache->data[t*cache->k + k].ptr;
+}
+
+void cache_el_mark(cache_t *cache, size_t t) {
+  cache->data[t*cache->k].dirty = 1;
+}
+
+uint8_t cache_el_is_marked(cache_t *cache, size_t t) {
+  return !!cache->data[t*cache->k].dirty;
 }
 
 void cache_free(cache_t *cache) {

@@ -1046,14 +1046,14 @@ template <int format> void GenProjections(PNG<format> *png, vector<HMM2D::Observ
     for (size_t j = 0; j < png->GetHeight(); ++j) {
       tmp.push_back(pixels[i*png->GetHeight() + j].g);
     }
-    xobs.push_back(SumThe2DState(tmp));
+    yobs.push_back(SumThe2DState(tmp));
   }
   for (size_t j = 0; j < png->GetHeight(); ++j) {
     HMM2D::State tmp;
     for (size_t i = 0; i < png->GetWidth(); ++i) {
       tmp.push_back(pixels[i*png->GetHeight() + j].g);
     }
-    yobs.push_back(SumThe2DState(tmp));
+    xobs.push_back(SumThe2DState(tmp));
   }
 }
 
