@@ -15,31 +15,46 @@ typedef enum _mode {
 void woop() {}
 static the_mode_t mode;
 static int dim = 0;
+bool reconstructit = false;
 int main(int argc, char **argv) {
-  if (argc > 1) {
-    if (!strcmp(argv[argc - 2], "generate")) {
+  static struct option long_options[] = {
+    {"reconstruct", no_argument, 0, 'r'},
+    {0, 0, 0, 0}
+  };
+  int long_index = 0;
+  int c;
+  while ((c = getopt_long(argc, argv, "r", long_options, &long_index)) != -1) {
+    switch (c) {
+      case 'r':
+        reconstructit = true;
+        break;
+    }
+  }
+  while (optind < argc) {
+    if (!strcmp(argv[optind], "generate")) {
       mode = GENERATE;
-			dim = atoi(argv[argc - 1]);
-    } else if (!strcmp(argv[argc - 1], "solve")) {
+      optind++;
+      if (optind == argc) { cerr << "viterbi: must supply a dimension to generate" << endl; exit(1); }
+      dim = atoi(argv[optind]);
+    } else if (!strcmp(argv[optind], "solve")) {
       mode = SOLVE;
-    } else {
+    } else if (!strcmp(argv[optind], "rotate")) {
       mode = ROTATE;
     }
-  } else mode = SOLVE;
+    optind++;
+  } 
   if (mode == SOLVE) {
-  PNG<PNG_FORMAT_GA> *png = PNG<PNG_FORMAT_GA>::FromFile("littlecircle.png");
+  PNG<PNG_FORMAT_GA> *png = PNG<PNG_FORMAT_GA>::FromFile("out.png");
   size_t coords[2] = { (size_t) png->GetWidth(), (size_t) png->GetHeight() };
   HMM2D::Ptr hmm = Calculate2DHMM<PNG<PNG_FORMAT_GA>::Pixel>((PNG<PNG_FORMAT_GA>::Pixel *) png->GetPixelArray(), coords);
   GenProjections(png, hmm->xobs, hmm->yobs);
-  cout << "Generated!" << endl;
   hmm2d_t *hmmc = HMM2DToC(hmm);
   double start = clock();
   cache_t *cache;
   viterbi2d_result_t *result = viterbi2d_max(hmmc, &cache);
-  reconstruct(hmmc, cache, "reconstruction.png");
+  if (reconstructit) reconstruct(hmmc, cache, "reconstruction.png");
   check_cache(cache);
   cache_free(cache);
-  print_hmm(hmmc);
   woop();
   cout << clock() - start << endl;
   } else if (mode == ROTATE) {
@@ -47,6 +62,12 @@ int main(int argc, char **argv) {
     cout << sin(2*M_PI) << endl;
     cout << sin(4*M_PI) << endl;
   } else {
-    WriteTriangle(dim, dim, "littlecircle.png");
+    WriteTriangle(dim, dim, "out.png");
+    PNG<PNG_FORMAT_GA> *png = PNG<PNG_FORMAT_GA>::FromFile("out.png");
+    size_t coords[2] = { (size_t) png->GetWidth(), (size_t) png->GetHeight() };
+    HMM2D::Ptr hmm = Calculate2DHMM<PNG<PNG_FORMAT_GA>::Pixel>((PNG<PNG_FORMAT_GA>::Pixel *) png->GetPixelArray(), coords);
+    hmm2d_t *hmmc = HMM2DToC(hmm);
+    print_hmm(hmmc);
+    delete png;
   }
 }
