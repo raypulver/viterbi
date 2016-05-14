@@ -19,7 +19,7 @@ matrix_t *init_matrix(size_t x, size_t y) {
   return retval;
 }
 
-void free_matrix(matrix_t *matrix) {
+void matrix_free(matrix_t *matrix) {
 	free(matrix->data);
 	free(matrix);
 }
