@@ -18,11 +18,11 @@ typedef struct _vector_t {
   size_t len;
 } vector_t;
 
-typedef struct _obs_vector_t {
+typedef struct _int_vector_t {
 	size_t *data;
 	size_t alloc;
 	size_t len;
-} obs_vector_t;
+} int_vector_t;
 
 typedef struct _hmm2d_t {
   size_t n;
@@ -30,13 +30,16 @@ typedef struct _hmm2d_t {
   size_t t;
   size_t *obs;
   matrix_t *ax;
+  int_vector_t *xrowsums;
+  int_vector_t *xcolsums;
   matrix_t *ay;
+  int_vector_t *yrowsums;
+  int_vector_t *ycolsums;
   vector_t *pix;
   vector_t *piy;
-  matrix_t *bx;
-  matrix_t *by;
-  obs_vector_t *xobs;
-  obs_vector_t *yobs;
+  matrix_t *b;
+  int_vector_t *xobs;
+  int_vector_t *yobs;
 } hmm2d_t;
 
 #ifdef __cplusplus
@@ -46,13 +49,13 @@ extern "C" {
 matrix_t *init_matrix(size_t x, size_t y);
 long double *matrix_el(matrix_t *m, size_t x, size_t y);
 vector_t *init_vector(size_t x);
-obs_vector_t *init_obs_vector(size_t x);
+int_vector_t *init_int_vector(size_t x);
 void vector_free(vector_t *vec);
-void obs_vector_free(obs_vector_t *vec);
+void int_vector_free(int_vector_t *vec);
 int vector_push(vector_t *vec, long double el);
-int obs_vector_push(obs_vector_t *vec, size_t el);
+int int_vector_push(int_vector_t *vec, size_t el);
 long double *vector_el(vector_t *vec, size_t i);
-size_t *obs_vector_el(obs_vector_t *vec, size_t i);
+size_t *int_vector_el(int_vector_t *vec, size_t i);
 
 viterbi2d_result_t *init_viterbi2d_result();
 void viterbi2d_free(viterbi2d_result_t *res);
@@ -63,6 +66,7 @@ viterbi2d_result_t *viterbi2d_max_no_cache(hmm2d_t *hmm);
 hmm2d_t *init_hmm2d();
 void print_hmm(hmm2d_t *);
 void reconstruct(hmm2d_t *hmm, cache_t *cache, const char *filename);
+matrix_t *rotate(hmm2d_t *hmm, double angle);
 
 #ifdef __cplusplus
 }

@@ -14,11 +14,15 @@
 #include <png.h>
 #include <libgen.h>
 #include <json-c/json.h>
+#include <Eigen/Dense>
 #include "pdb.h"
 #include "voxelizer.h"
 #include "hmm.h"
 
 using namespace std;
+using namespace Eigen;
+
+typedef Matrix<long double, Dynamic, Dynamic> AMatrix;
 
 template <typename T> T log(T arg, string str) {
   cout << str << ": " << arg << endl;
@@ -521,16 +525,29 @@ template <typename T> HMM2D::Ptr Calculate2DHMM(T *items, size_t *coords) {
   HMM2D::PartialState depth = 0;
   bool starting = true;
   bool initial = true;
+  vector<HMM2D::Observation> xobs;
+  vector<HMM2D::Observation> yobs;
+  GenProjections(items, coords[0], coords[1], xobs, yobs);
+  retval->observations.reserve(xobs.size() + yobs.size());
+  retval->observations.insert(retval->observations.end(), xobs.begin(), xobs.end());
+  retval->observations.insert(retval->observations.end(), yobs.begin(), yobs.end());
+  unique(retval->observations.begin(), retval->observations.end());
+  sort(retval->observations.begin(), retval->observations.end());
+  for (auto it = retval->observations.begin(); it != retval->observations.end(); it++) {
+    retval->observation_map[*it] = distance(retval->observations.begin(), it);
+  }
   vector<HMM2D::PartialState> xinitial_states;
   vector<HMM2D::PartialTransition> xtransitions;
   vector<HMM2D::PartialState> yinitial_states;
   vector<HMM2D::PartialTransition> ytransitions;
+  vector<pair<HMM2D::PartialState, HMM2D::Observation>> obs;
   for (size_t i = 0; i < coords[0]; ++i) {
     for (size_t j = 0; j < coords[1]; ++j) {
-      depth = items[i*coords[0] + j].GetValue();
+      depth = items[i*coords[1] + j].GetValue();
       if (initial) xinitial_states.push_back(depth);
       else xtransitions.push_back(HMM2D::PartialTransition(last_depth, depth));
       retval->states.push_back(depth);
+      obs.push_back(pair<HMM2D::PartialState, HMM2D::Observation>(depth, xobs[i]));
       last_depth = depth;
       initial = false;
     }
@@ -538,9 +555,10 @@ template <typename T> HMM2D::Ptr Calculate2DHMM(T *items, size_t *coords) {
   }
   for (size_t i = 0; i < coords[1]; ++i) {
     for (size_t j = 0; j < coords[0]; ++j) {
-      depth = items[j*coords[0] + i].GetValue();
+      depth = items[j*coords[1] + i].GetValue();
       if (initial) yinitial_states.push_back(depth);
       else ytransitions.push_back(HMM2D::PartialTransition(last_depth, depth));
+      obs.push_back(pair<HMM2D::PartialState, HMM2D::Observation>(depth, yobs[i]));
       last_depth = depth;
       initial = false;
     }
@@ -625,6 +643,21 @@ template <typename T> HMM2D::Ptr Calculate2DHMM(T *items, size_t *coords) {
   }
   if (sum) for (size_t i = 0; i < retval->states.size(); ++i) {
     retval->yinitial[i] /= sum;
+  }
+  retval->emit.resize(retval->observations.size() * retval->states.size());
+  for (auto it = obs.begin(); it != obs.end(); it++) {
+    retval->emit[retval->observations.size()*retval->state_map[it->first] + retval->observation_map[it->second]]++;
+  }
+  for (size_t i = 0; i < retval->states.size(); ++i) {
+    double sum = 0;
+    for (size_t j = 0; j < retval->observations.size(); ++j) {
+      sum += retval->emit[retval->observations.size()*i + j];
+    }
+    if (sum) {
+      for (size_t j = 0; j < retval->observations.size(); ++j) {
+        retval->emit[retval->observations.size()*i + j] /= sum;
+      }
+    }
   }
   return retval;
 }
@@ -756,6 +789,14 @@ double SumThe2DState(HMM2D::State &state) {
   return sum;
 }
 
+double AvgThe2DState(HMM2D::State &state, int dim) {
+  size_t sum = 0;
+  for (auto s : state) {
+    sum += s;
+  }
+  sum = (size_t) ceil((double) sum / dim); 
+  return sum;
+}
 double SumThe2DStateExceptFirst(HMM2D::State &state) {
   size_t sum = 0;
   HMM2D::State::const_iterator it = state.cbegin();
@@ -1039,25 +1080,46 @@ Permutation::~Permutation() {
 
 template HMM2D::Ptr Calculate2DHMM<typename PNG<1>::Pixel>(typename PNG<1>::Pixel *, size_t *);
 
-template <int format> void GenProjections(PNG<format> *png, vector<HMM2D::Observation> &xobs, vector<HMM2D::Observation> &yobs) {
-  typename PNG<format>::Pixel *pixels = png->GetPixelArray();
-  for (size_t i = 0; i < png->GetWidth(); ++i) {
+void GenProjections(PNG<PNG_FORMAT_GA>::Pixel *pixels, size_t x, size_t y, vector<HMM2D::Observation> &xobs, vector<HMM2D::Observation> &yobs) {
+  for (size_t j = 0; j < y; ++j) {
     HMM2D::State tmp;
-    for (size_t j = 0; j < png->GetHeight(); ++j) {
-      tmp.push_back(pixels[i*png->GetHeight() + j].g);
+    for (size_t i = 0; i < x; ++i) {
+      tmp.push_back(pixels[i*x + j].g);
     }
-    yobs.push_back(SumThe2DState(tmp));
+    yobs.push_back(AvgThe2DState(tmp, x));
   }
+  for (size_t i = 0; i < x; ++i) {
+    HMM2D::State tmp;
+    for (size_t j = 0; j < y; ++j) {
+      tmp.push_back(pixels[i*y + j].g);
+    }
+    xobs.push_back(AvgThe2DState(tmp, y));
+  }
+}
+void GenProjectionsMapped(PNG<PNG_FORMAT_GA> *png, HMM2D::Ptr hmm) {
+  PNG<PNG_FORMAT_GA>::Pixel *pixels = png->GetPixelArray();
   for (size_t j = 0; j < png->GetHeight(); ++j) {
     HMM2D::State tmp;
     for (size_t i = 0; i < png->GetWidth(); ++i) {
       tmp.push_back(pixels[i*png->GetHeight() + j].g);
     }
-    xobs.push_back(SumThe2DState(tmp));
+    hmm->yobs.push_back(AvgThe2DState(tmp, png->GetWidth()));
+  }
+  for (size_t i = 0; i < png->GetWidth(); ++i) {
+    HMM2D::State tmp;
+    for (size_t j = 0; j < png->GetHeight(); ++j) {
+      tmp.push_back(pixels[i*png->GetHeight() + j].g);
+    }
+    hmm->xobs.push_back(AvgThe2DState(tmp, png->GetHeight()));
+  }
+  for (size_t i = 0; i < hmm->yobs.size(); ++i) {
+    hmm->yobs[i] = hmm->observation_map[hmm->yobs[i]];
+  }
+  for (size_t i = 0; i < hmm->xobs.size(); ++i) {
+    hmm->xobs[i] = hmm->observation_map[hmm->xobs[i]];
   }
 }
 
-template void GenProjections(PNG<PNG_FORMAT_GA> *, vector<HMM2D::Observation> &, vector<HMM2D::Observation> &);
 /*
 
 PNG<PNG_FORMAT_GA> *Reconstruct(HMM2D::Ptr a, Viterbi2DResult *result) {
@@ -1105,6 +1167,7 @@ void RowNormalize(HMM2D *a) {
   }
 } 
 
+/*
 void Transpose(vector<size_t> &vec, size_t len, vector<size_t> &xsums, vector<size_t> &ysums) {
   size_t columns = vec.size()/len;
   for (size_t i = 0; i < len; ++i) {
@@ -1210,6 +1273,8 @@ void HMM2D::Rotate(double d) {
   ytransitionwhole = newy;
   RowNormalize(this);
 }
+*/
+
 HMM2D::Ptr Calculate2DHMMReverse(PNG<PNG_FORMAT_GA>::Pixel *items, size_t *coords) {
   HMM2D::Ptr retval = HMM2D::New();
   HMM2D::PartialState last_depth = 0;
@@ -1306,29 +1371,43 @@ hmm2d_t *HMM2DToC(HMM2D::Ptr a) {
   size_t i, j;
   hmm2d_t *retval = init_hmm2d();
   retval->n = a->states.size();
+  retval->t = a->observations.size();
   retval->states = (size_t *) calloc(retval->n, sizeof(size_t));
+  retval->obs = (size_t *) calloc(retval->t, sizeof(size_t));
   retval->pix = init_vector(retval->n);
   retval->piy = init_vector(retval->n);
+  retval->xrowsums = init_int_vector(retval->n);
+  retval->xcolsums = init_int_vector(retval->n);
+  retval->yrowsums = init_int_vector(retval->n);
+  retval->ycolsums = init_int_vector(retval->n);
   for (i = 0; i < retval->n; ++i) {
     retval->states[i] = a->states[i];
     vector_push(retval->pix, (long double) a->xinitial[i]);
     vector_push(retval->piy, (long double) a->yinitial[i]);
+    int_vector_push(retval->xrowsums, a->xrowsums[i]);
+    int_vector_push(retval->xcolsums, a->xcolsums[i]);
+    int_vector_push(retval->yrowsums, a->yrowsums[i]);
+    int_vector_push(retval->ycolsums, a->ycolsums[i]);
   }
   retval->ax = init_matrix(retval->n, retval->n);
   retval->ay = init_matrix(retval->n, retval->n);
+  retval->b = init_matrix(retval->n, retval->t);
   for (i = 0; i < retval->n; ++i) {
     for (j = 0; j < retval->n; ++j) {
       *matrix_el(retval->ax, i, j) = a->xtransition[i*retval->n + j];
       *matrix_el(retval->ay, i, j) = a->ytransition[i*retval->n + j];
     }
+    for (j = 0; j < retval->t; ++j) {
+      *matrix_el(retval->b, i, j) = a->emit[i*retval->t + j];
+    }
   }
-  retval->xobs = init_obs_vector(a->xobs.size());
+  retval->xobs = init_int_vector(a->xobs.size());
   for (i = 0; i < a->xobs.size(); ++i) {
-    obs_vector_push(retval->xobs, a->xobs[i]);
+    int_vector_push(retval->xobs, a->xobs[i]);
   }
-  retval->yobs = init_obs_vector(a->yobs.size());
+  retval->yobs = init_int_vector(a->yobs.size());
   for (i = 0; i < a->yobs.size(); ++i) {
-    obs_vector_push(retval->yobs, a->yobs[i]);
+    int_vector_push(retval->yobs, a->yobs[i]);
   }
   return retval;
 }

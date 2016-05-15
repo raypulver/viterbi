@@ -592,6 +592,8 @@ CXXDEPMODE
 ac_ct_CXX
 CXXFLAGS
 CXX
+eigen3_LIBS
+eigen3_CFLAGS
 zlib_LIBS
 zlib_CFLAGS
 libpng_LIBS
@@ -702,6 +704,8 @@ libpng_CFLAGS
 libpng_LIBS
 zlib_CFLAGS
 zlib_LIBS
+eigen3_CFLAGS
+eigen3_LIBS
 CXX
 CXXFLAGS
 CCC'
@@ -1344,6 +1348,9 @@ Some influential environment variables:
   libpng_LIBS linker flags for libpng, overriding pkg-config
   zlib_CFLAGS C compiler flags for zlib, overriding pkg-config
   zlib_LIBS   linker flags for zlib, overriding pkg-config
+  eigen3_CFLAGS
+              C compiler flags for eigen3, overriding pkg-config
+  eigen3_LIBS linker flags for eigen3, overriding pkg-config
   CXX         C++ compiler command
   CXXFLAGS    C++ compiler flags
 
@@ -1857,7 +1864,7 @@ ac_compiler_gnu=$ac_cv_c_compiler_gnu
 
 
 
-am__api_version='1.14'
+am__api_version='1.15'
 
 ac_aux_dir=
 for ac_dir in "$srcdir" "$srcdir/.." "$srcdir/../.."; do
@@ -2058,8 +2065,8 @@ test "$program_suffix" != NONE &&
 ac_script='s/[\\$]/&&/g;s/;s,x,x,$//'
 program_transform_name=`$as_echo "$program_transform_name" | sed "$ac_script"`
 
-# expand $ac_aux_dir to an absolute path
-am_aux_dir=`cd $ac_aux_dir && pwd`
+# Expand $ac_aux_dir to an absolute path.
+am_aux_dir=`cd "$ac_aux_dir" && pwd`
 
 if test x"${MISSING+set}" != xset; then
   case $am_aux_dir in
@@ -2078,7 +2085,7 @@ else
 $as_echo "$as_me: WARNING: 'missing' script is too old or missing" >&2;}
 fi
 
-if test x"${install_sh}" != xset; then
+if test x"${install_sh+set}" != xset; then
   case $am_aux_dir in
   *\ * | *\	*)
     install_sh="\${SHELL} '$am_aux_dir/install-sh'" ;;
@@ -2406,8 +2413,8 @@ MAKEINFO=${MAKEINFO-"${am_missing_run}makeinfo"}
 # <http://lists.gnu.org/archive/html/automake/2012-07/msg00014.html>
 mkdir_p='$(MKDIR_P)'
 
-# We need awk for the "check" target.  The system "awk" is bad on
-# some platforms.
+# We need awk for the "check" target (and possibly the TAP driver).  The
+# system "awk" is bad on some platforms.
 # Always define AMTAR for backward compatibility.  Yes, it's still used
 # in the wild :-(  We should find a proper way to deprecate it ...
 AMTAR='$${TAR-tar}'
@@ -2464,6 +2471,7 @@ END
     as_fn_error $? "Your 'rm' program is bad, sorry." "$LINENO" 5
   fi
 fi
+
 
 PNG_REQUIRED_VERSION=1.0
 ZLIB_REQUIRED_VERSION=1.0
@@ -3808,6 +3816,99 @@ else
 $as_echo "yes" >&6; }
 
 fi
+
+pkg_failed=no
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for eigen3" >&5
+$as_echo_n "checking for eigen3... " >&6; }
+
+if test -n "$eigen3_CFLAGS"; then
+    pkg_cv_eigen3_CFLAGS="$eigen3_CFLAGS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"eigen3 >= 3.0\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "eigen3 >= 3.0") 2>&5
+  ac_status=$?
+  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_eigen3_CFLAGS=`$PKG_CONFIG --cflags "eigen3 >= 3.0" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
+fi
+if test -n "$eigen3_LIBS"; then
+    pkg_cv_eigen3_LIBS="$eigen3_LIBS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"eigen3 >= 3.0\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "eigen3 >= 3.0") 2>&5
+  ac_status=$?
+  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_eigen3_LIBS=`$PKG_CONFIG --libs "eigen3 >= 3.0" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
+fi
+
+
+
+if test $pkg_failed = yes; then
+   	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+
+if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
+        _pkg_short_errors_supported=yes
+else
+        _pkg_short_errors_supported=no
+fi
+        if test $_pkg_short_errors_supported = yes; then
+	        eigen3_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "eigen3 >= 3.0" 2>&1`
+        else
+	        eigen3_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "eigen3 >= 3.0" 2>&1`
+        fi
+	# Put the nasty error message in config.log where it belongs
+	echo "$eigen3_PKG_ERRORS" >&5
+
+	as_fn_error $? "Package requirements (eigen3 >= 3.0) were not met:
+
+$eigen3_PKG_ERRORS
+
+Consider adjusting the PKG_CONFIG_PATH environment variable if you
+installed software in a non-standard prefix.
+
+Alternatively, you may set the environment variables eigen3_CFLAGS
+and eigen3_LIBS to avoid the need to call pkg-config.
+See the pkg-config man page for more details." "$LINENO" 5
+elif test $pkg_failed = untried; then
+     	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+	{ { $as_echo "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
+$as_echo "$as_me: error: in \`$ac_pwd':" >&2;}
+as_fn_error $? "The pkg-config script could not be found or is too old.  Make sure it
+is in your PATH or set the PKG_CONFIG environment variable to the full
+path to pkg-config.
+
+Alternatively, you may set the environment variables eigen3_CFLAGS
+and eigen3_LIBS to avoid the need to call pkg-config.
+See the pkg-config man page for more details.
+
+To get pkg-config, see <http://pkg-config.freedesktop.org/>.
+See \`config.log' for more details" "$LINENO" 5; }
+else
+	eigen3_CFLAGS=$pkg_cv_eigen3_CFLAGS
+	eigen3_LIBS=$pkg_cv_eigen3_LIBS
+        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+
+fi
+
+
 
 
 

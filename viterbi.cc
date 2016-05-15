@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
   PNG<PNG_FORMAT_GA> *png = PNG<PNG_FORMAT_GA>::FromFile("out.png");
   size_t coords[2] = { (size_t) png->GetWidth(), (size_t) png->GetHeight() };
   HMM2D::Ptr hmm = Calculate2DHMM<PNG<PNG_FORMAT_GA>::Pixel>((PNG<PNG_FORMAT_GA>::Pixel *) png->GetPixelArray(), coords);
-  GenProjections(png, hmm->xobs, hmm->yobs);
+  GenProjectionsMapped(png, hmm);
   hmm2d_t *hmmc = HMM2DToC(hmm);
   double start = clock();
   cache_t *cache;
@@ -58,9 +58,19 @@ int main(int argc, char **argv) {
   woop();
   cout << clock() - start << endl;
   } else if (mode == ROTATE) {
-    cout << M_PI << endl;
-    cout << sin(2*M_PI) << endl;
-    cout << sin(4*M_PI) << endl;
+  PNG<PNG_FORMAT_GA> *png = PNG<PNG_FORMAT_GA>::FromFile("out.png");
+  size_t coords[2] = { (size_t) png->GetWidth(), (size_t) png->GetHeight() };
+  HMM2D::Ptr hmm = Calculate2DHMM<PNG<PNG_FORMAT_GA>::Pixel>((PNG<PNG_FORMAT_GA>::Pixel *) png->GetPixelArray(), coords);
+  hmm2d_t *hmmc = HMM2DToC(hmm);
+  print_hmm(hmmc);
+  matrix_t *rotated = rotate(hmmc, M_PI/4);
+  for (size_t i = 0; i < rotated->x; ++i) {
+    cout << "[ ";
+    for (size_t j = 0; j < rotated->y; ++j) {
+      cout << *matrix_el(rotated, i, j) << " ";
+    }
+    cout << "]" << endl;
+  }
   } else {
     WriteTriangle(dim, dim, "out.png");
     PNG<PNG_FORMAT_GA> *png = PNG<PNG_FORMAT_GA>::FromFile("out.png");
